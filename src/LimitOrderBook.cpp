@@ -6,6 +6,7 @@
 #include <cmath>
 #include <string>
 #include <chrono>
+#include <iostream>
 
 #include "datatypes.h"
 #include "UIHelpers.h"
@@ -83,11 +84,6 @@ void LimitOrderBook::update() {
 	}
 
 	midPriceRecords.push_back(midPrice);
-}
-
-const std::vector<TradeRecord>& LimitOrderBook::getTradeHistory() const
-{
-	return tradeRecords;
 }
 
 const std::vector<double>& LimitOrderBook::getMidPriceHistory() const
@@ -273,7 +269,7 @@ void LimitOrderBook::recordTrade(const Order& bidOrder, const Order& askOrder, l
 	tradeRecord.tradeId = nextTradeId++;
 	tradeRecord.price = price;
 	tradeRecord.volume = volume;
-	tradeRecords.push_back(tradeRecord);
+	pendingTrades.push_back(tradeRecord);
 
 	Trader* buyer = traders[bidOrder.traderId];
 	Trader* seller = traders[askOrder.traderId];
@@ -291,48 +287,9 @@ void LimitOrderBook::recordTrade(const Order& bidOrder, const Order& askOrder, l
 	}
 }
 
-const std::vector<DepthPoint> LimitOrderBook::depthChartPoints(float binSize, long* totalVolume) const
+std::vector<TradeRecord> LimitOrderBook::flushTrades()
 {
-	std::vector<DepthPoint> depthPoints;
-	if (bids.empty() || asks.empty()) {
-		*totalVolume = 0;
-		return {};
-	}
-
-	depthPoints.reserve(bids.size() + asks.size() + 1);
-
-	long runningBidVol = 0;
-	std::vector<DepthPoint> tempBids;
-
-	//Adding points in reverse then reversing to avoid adding to front
-	for (auto it = bids.begin(); it != bids.end(); ++it) {
-		long levelVol = 0;
-		for (const auto& order : it->second) levelVol += order.volume;
-
-		runningBidVol += levelVol;
-		float priceLevel = std::floor(it->first / binSize) * binSize;
-
-		tempBids.push_back({ priceLevel, runningBidVol });
-	}
-
-	for (auto it = tempBids.rbegin(); it != tempBids.rend(); ++it) {
-		depthPoints.push_back(*it);
-	}
-
-	//Midpoint
-	float midPrice = (bids.begin()->first + asks.begin()->first) / 2.0f;
-	depthPoints.push_back({ std::floor(midPrice / binSize) * binSize, 0 });
-
-	long runningAskVol = 0;
-	for (auto it = asks.begin(); it != asks.end(); ++it) {
-		long levelVol = 0;
-		for (const auto& order : it->second) levelVol += order.volume;
-		runningAskVol += levelVol;
-
-		float priceLevel = std::floor(it->first / binSize) * binSize;
-		depthPoints.push_back({ priceLevel, runningAskVol });
-	}
-
-	*totalVolume = std::max(runningBidVol, runningAskVol);
-	return depthPoints;
+	std::vector<TradeRecord> trades = std::move(pendingTrades);
+	pendingTrades.clear();
+	return trades;
 }

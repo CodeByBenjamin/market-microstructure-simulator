@@ -19,55 +19,53 @@ std::string UIHelper::formatPrice(double price)
     return ss.str();
 }
 
-void UIHelper::drawLabel(sf::RenderTarget& target, const sf::Font& font, const std::string& label, int fontSize, float x, float y, TextSnap snap, float offset, sf::Color color)
+void UIHelper::drawLabel(sf::RenderTarget& target, const sf::Font& font, const std::string& label, int fontSize, float x, float y, UISnap snap, float offset, sf::Color color)
 {
     sf::Text text(font);
     text.setCharacterSize(fontSize);
     text.setFillColor(color);
-
     text.setString(label);
 
-    float fullOffset = offset;
+    sf::FloatRect bounds = text.getLocalBounds();
 
     switch (snap)
     {
-    case TextSnap::Left:
+    case UISnap::Left:
+        text.setOrigin({ 0.f, 0.f });
         break;
-    case TextSnap::Center:
-        fullOffset -= text.getLocalBounds().size.x / 2.f;
+    case UISnap::Center:
+        text.setOrigin({ std::round(bounds.size.x / 2.f), 0.f });
         break;
-    case TextSnap::Right:
-        fullOffset -= text.getLocalBounds().size.x;
+    case UISnap::Right:
+        text.setOrigin({ std::round(bounds.size.x), 0.f });        
         break;
     }
 
-    text.setPosition({ std::round(x + fullOffset), std::round(y) });
+    text.setPosition({ std::round(x + offset), std::round(y) });
 
     target.draw(text);
 }
 
-void UIHelper::drawColoredRect(sf::RenderTarget& target, float x, float y, float width, float height, TextSnap snap, float offset, sf::Color color)
+void UIHelper::drawColoredRect(sf::RenderTarget& target, float x, float y, float width, float height, UISnap snap, float offset, sf::Color color)
 {
     sf::RectangleShape rect;
 
     rect.setSize(sf::Vector2f(width, height));
     rect.setFillColor(color);
 
-    float fullOffset = offset;
-
     switch (snap)
     {
-    case TextSnap::Left:
+    case UISnap::Left:
         break;
-    case TextSnap::Center:
-        fullOffset -= width / 2.f;
+    case UISnap::Center:
+        rect.setOrigin({ width / 2.f, height / 2.f });  
         break;
-    case TextSnap::Right:
-        fullOffset -= width;
+    case UISnap::Right:
+        rect.setOrigin({ width, 0.f });
         break;
     }
 
-    rect.setPosition({ std::round(x + fullOffset), std::round(y)});
+    rect.setPosition({ x + offset, y });
 
     target.draw(rect);
 }

@@ -36,23 +36,13 @@ void TrendStrategy::decide(Trader& trader, LimitOrderBook& LOB, Clock& clock)
 	double threshold = avr * 0.001;
 
 	bool buyingTheDip = false;
-	if (trader.getFunds() >= 6000) {
+	if (trader.getFunds() >= 10000) {
 		buyingTheDip = true;
 	}
 
 	bool cashOut = false;
-	if (trader.getStocks() >= 300) {
+	if (trader.getStocks() >= 500) {
 		cashOut = true;
-	}
-
-	if (cashOut) {
-		auto const& bids = LOB.getBids();
-		if (bids.empty())  return;
-
-		double executionPrice = bids.begin()->first * 0.99;
-		long amountToDump = trader.getStocks() / 10;
-		Order sellOrder = { 0, trader.getId(), executionPrice, amountToDump, Side::SELL, clock.now() };
-		LOB.processOrder(sellOrder, clock);
 	}
 
 	if (diff > threshold && !cashOut)
@@ -62,7 +52,7 @@ void TrendStrategy::decide(Trader& trader, LimitOrderBook& LOB, Clock& clock)
 
 		auto bestAskIt = asks.begin();
 
-		double executionPrice = bestAskIt->first * 1.01;
+		double executionPrice = bestAskIt->first * 1.05;
 
 		double funds = trader.getFunds();
 		long canBuy = static_cast<long>(std::floor(funds / executionPrice));
@@ -72,7 +62,7 @@ void TrendStrategy::decide(Trader& trader, LimitOrderBook& LOB, Clock& clock)
 		double perc = diff / avr;
 
 		long minVol = static_cast<long>(canBuy * perc);
-		long maxVol = static_cast<long>(canBuy * 0.2);
+		long maxVol = static_cast<long>(canBuy * 0.3);
 
 		if (minVol >= maxVol) minVol = maxVol / 2;
 		std::uniform_int_distribution<long> dist(std::max(1L, minVol), std::max(1L, maxVol));
@@ -93,7 +83,7 @@ void TrendStrategy::decide(Trader& trader, LimitOrderBook& LOB, Clock& clock)
 
 		auto bestBidIt = bids.begin();
 
-		double executionPrice = bestBidIt->first * 0.99;
+		double executionPrice = bestBidIt->first * 0.95;
 
 		long canSell = trader.getStocks();
 
@@ -102,7 +92,7 @@ void TrendStrategy::decide(Trader& trader, LimitOrderBook& LOB, Clock& clock)
 		double perc = std::abs(diff) / avr;
 
 		long minVol = static_cast<long>(canSell * perc);
-		long maxVol = static_cast<long>(canSell * 0.2);
+		long maxVol = static_cast<long>(canSell * 0.3);
 
 		if (minVol >= maxVol) minVol = maxVol / 2;
 		std::uniform_int_distribution<long> dist(std::max(1L, minVol), std::max(1L, maxVol));

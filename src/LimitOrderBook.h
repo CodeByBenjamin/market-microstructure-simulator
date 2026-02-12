@@ -26,7 +26,7 @@ private:
 	long nextOrderId = 1;
 
 	double lastTradePrice = 0.0;
-	std::vector<TradeRecord> tradeRecords;
+	std::vector<TradeRecord> pendingTrades;
 	std::vector<double> midPriceRecords;
 
 	long nextTradeId = 1;
@@ -39,7 +39,6 @@ public:
 
 	void update();
 
-	const std::vector<TradeRecord>& getTradeHistory() const;
 	const std::vector<double>& getMidPriceHistory() const;
 
 	long processOrder(const Order& incomingOrder, Clock& clock);
@@ -50,6 +49,5 @@ public:
 	void registerTrader(Trader* trader);
 
 	void recordTrade(const Order& restingOrder, const Order& incomingOrder, long volume, double price, Clock& clock);
-
-	const std::vector<DepthPoint> depthChartPoints(float binSize, long* totalVolume) const;
+	std::vector<TradeRecord> flushTrades();
 };

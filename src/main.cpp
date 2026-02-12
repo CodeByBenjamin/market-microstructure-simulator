@@ -17,11 +17,12 @@
 #include "Trader.h"
 #include "TrendStrategy.h"
 #include "RandomStrategy.h"
+#include "CandleChart.h"
 
 int main()
 {
     auto window = sf::RenderWindow(sf::VideoMode({1920u, 1080u}), "Market simulator", sf::State::Fullscreen);
-    window.setFramerateLimit(144);
+    window.setFramerateLimit(60);
 
     sf::Font font;
     if (!font.openFromFile("fonts/RobotoMono-Regular.ttf"))
@@ -33,21 +34,23 @@ int main()
 
     double dt = 1.0; //Ticks per update
 
-    double updatesPerSecond = 10.0;
-    double realDt = 1.0 / updatesPerSecond;
+    double ticksPerSec = 10.0;
+    double realDt = 1.0 / ticksPerSec;
     auto lastTime = std::chrono::high_resolution_clock::now();
 
     LOBPanel lobPanel;
 
     LimitOrderBook LOB;
-    DepthChart depthChart;
+    DepthChart depthChart(0.5);
+    long binSize = ticksPerSec * 0.1;
+    int candlesVisible = 100;
+    CandleChart candleChart(binSize, candlesVisible);
 
     float lobWidth = static_cast<float>(window.getSize().x * 0.25f);
-    float chartWidth = static_cast<float>(window.getSize().x * 0.25f);
-    float chartHeight = static_cast<float>(window.getSize().y * 0.25f);
+    float depthChartWidth = static_cast<float>(window.getSize().x * 0.25f);
+    float depthChartHeight = static_cast<float>(window.getSize().y * 0.25f);
 
     bool lobDirty = true;
-
 
     TrendStrategy* trendStrat = new TrendStrategy();
     std::vector<Trader> trendTraders;
@@ -67,6 +70,8 @@ int main()
 
     LOB.registerTrader(new Trader{randomStrat, 999, 100000.0, 20000L});
 
+    bool pauseSim = false;
+
     while (window.isOpen())
     {
         while (const std::optional event = window.pollEvent())
@@ -79,12 +84,16 @@ int main()
             if (const auto* keyPressed = event->getIf<sf::Event::KeyPressed>()) {
                 if (keyPressed->code == sf::Keyboard::Key::Escape) window.close();
             }
+
+            if (const auto* keyPressed = event->getIf<sf::Event::KeyPressed>()) {
+                if (keyPressed->code == sf::Keyboard::Key::Space) pauseSim = !pauseSim;
+            }
         }
 
         auto now = std::chrono::high_resolution_clock::now();
         std::chrono::duration<double> elapsed = now - lastTime;
 
-        while (elapsed.count() >= realDt)
+        while (elapsed.count() >= realDt && !pauseSim)
         {
             clock.advance(dt);
             lastTime += std::chrono::duration_cast<
@@ -94,11 +103,11 @@ int main()
             elapsed = now - lastTime;
         
             LOB.update();
-
             if (clock.now() == 30) {
                 Order whalePanic = { 999, 999, 10.0, 2000, Side::SELL, clock.now() };
                 LOB.processOrder(whalePanic, clock);
-            }
+                }
+
         
             for (size_t i = 0; i < 10; i++)
             {
@@ -117,12 +126,14 @@ int main()
 
         if (lobDirty)
         {
-            depthChart.update(LOB, chartWidth, chartHeight, window.getSize());
+            depthChart.update(LOB, depthChartWidth, depthChartHeight, window.getSize());
+            candleChart.update(LOB, clock.now());
             lobDirty = false;
         }
 
         lobPanel.draw(window, font, LOB, lobWidth);
         window.draw(depthChart);
+        window.draw(candleChart);
         window.display();
     }
 }

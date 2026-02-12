@@ -37,3 +37,8 @@ struct DepthPoint {
 	float price;
 	long totalVolume;
 };
+
+struct Candle {
+	double open, high, low, close;
+	long startTime;
+};

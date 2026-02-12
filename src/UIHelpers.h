@@ -20,13 +20,13 @@ namespace Theme {
     inline const sf::Color Accent = sf::Color(210, 153, 34);  // "Special" info
 }
 
-enum class TextSnap { Left, Center, Right };
+enum class UISnap { Left, Center, Right };
 
 class UIHelper
 {
 public:
     static std::string formatPrice(double price);
 
-    static void drawLabel(sf::RenderTarget& target, const sf::Font& font, const std::string& label, int fontSize, float x, float y, TextSnap snap, float offset, sf::Color color);
-    static void drawColoredRect(sf::RenderTarget& target, float x, float y, float width, float height, TextSnap snap, float offset, sf::Color color);
+    static void drawLabel(sf::RenderTarget& target, const sf::Font& font, const std::string& label, int fontSize, float x, float y, UISnap snap, float offset, sf::Color color);
+    static void drawColoredRect(sf::RenderTarget& target, float x, float y, float width, float height, UISnap snap, float offset, sf::Color color);
 };

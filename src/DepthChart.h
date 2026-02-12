@@ -14,8 +14,13 @@ private:
 
     sf::VertexArray bidTriangles;
     sf::VertexArray askTriangles;
-public:
-    DepthChart();
 
+    long totalVolume;
+    float binSize;
+    std::vector<DepthPoint> depthPoints;
+public:
+    DepthChart(float binSize);
+
+    void DepthChart::updateDepthPoints(const LimitOrderBook& LOB);
     void update(const LimitOrderBook& LOB, float chartWidth, float chartHeight, sf::Vector2u winSize);
 };
