@@ -1,6 +1,12 @@
-#include "LOBPanel.h"
 #include <SFML/Graphics/RenderWindow.hpp>
+#include <SFML/Graphics/Font.hpp>
+#include <string>
+#include <algorithm>
+
+#include "datatypes.h"
+#include "LOBPanel.h"
 #include "UIHelpers.h"
+#include "LimitOrderBook.h"
 
 void LOBPanel::draw(sf::RenderWindow& window, const sf::Font& font, const LimitOrderBook& LOB, float lobWidth)
 {
@@ -57,12 +63,18 @@ void LOBPanel::draw(sf::RenderWindow& window, const sf::Font& font, const LimitO
 
 		count = 0;
 		for (auto it = bids.begin(); it != bids.end() && count < maxCount; ++it) {
-			if (it->second.empty())
+			if (it->second.orderEntries.empty())
 				continue;
 
 			long onePriceVol = 0;
-			for (const auto& order : it->second)
-				onePriceVol += order.volume;
+			for (const auto& entry : it->second.orderEntries)
+			{
+				const Order* order = LOB.getOrder(entry.id);
+				if (order == NULL)
+					continue;
+
+				onePriceVol += order->volume;
+			}
 
 			float fullPerc = static_cast<float>(onePriceVol) / maxVol;
 			float yPos = currentY + (rowHeight + padding) * count;
@@ -78,12 +90,18 @@ void LOBPanel::draw(sf::RenderWindow& window, const sf::Font& font, const LimitO
 
 		count = 0;
 		for (auto it = asks.begin(); it != asks.end() && count < maxCount; ++it) {
-			if (it->second.empty())
+			if (it->second.orderEntries.empty())
 				continue;
 
 			long onePriceVol = 0;
-			for (const auto& order : it->second)
-				onePriceVol += order.volume;
+			for (const auto& entry : it->second.orderEntries)
+			{
+				const Order* order = LOB.getOrder(entry.id);
+				if (order == NULL)
+					continue;
+
+				onePriceVol += order->volume;
+			}
 
 			float fullPerc = static_cast<float>(onePriceVol) / maxVol;
 			float yPos = currentY + (rowHeight + padding) * count;
@@ -99,5 +117,5 @@ void LOBPanel::draw(sf::RenderWindow& window, const sf::Font& font, const LimitO
 	}
 
 	UIHelper::drawColoredRect(window, lobWidth, 0.f, 2.f, window.getSize().y, UISnap::Left, 0.f, Theme::Border);
-	UIHelper::drawColoredRect(window, lobWidth / 2.f, window.getSize().y / 2 + currentY, 2.f, window.getSize().y, UISnap::Center, 0.f, Theme::Border);
+	UIHelper::drawColoredRect(window, lobWidth / 2.f, window.getSize().y / 2.f + currentY, 2.f, window.getSize().y, UISnap::Center, 0.f, Theme::Border);
 }

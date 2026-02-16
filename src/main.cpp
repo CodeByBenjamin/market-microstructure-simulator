@@ -1,5 +1,6 @@
 #include <iostream>
 #include <vector>
+#include <chrono>
 #include <SFML/Graphics/RenderWindow.hpp>
 #include <SFML/Graphics/RenderTarget.hpp>
 #include <SFML/Graphics/Font.hpp>
@@ -7,6 +8,7 @@
 #include <SFML/Window/VideoMode.hpp>
 #include <SFML/Window/WindowEnums.hpp>
 #include <SFML/Window/Event.hpp>
+#include <SFML/Window/Keyboard.hpp>
 
 #include "Clock.h"
 #include "datatypes.h"
@@ -53,20 +55,20 @@ int main()
     bool lobDirty = true;
 
     TrendStrategy* trendStrat = new TrendStrategy();
-    std::vector<Trader> trendTraders;
+    std::vector<Trader*> trendTraders;
     trendTraders.reserve(10);
     for (int i = 0; i < 5; i++) {
-        trendTraders.emplace_back(trendStrat, i, 2000.0, 100L);
+        trendTraders.push_back(new Trader(trendStrat, i, 2000.0, 100L));
     }
-    for (auto& t : trendTraders) LOB.registerTrader(&t);
+    for (auto& t : trendTraders) LOB.registerTrader(t);
 
     RandomStrategy* randomStrat = new RandomStrategy();
-    std::vector<Trader> randomTraders;
+    std::vector<Trader*> randomTraders;
     randomTraders.reserve(20);
     for (int i = 0; i < 10; i++) {
-        randomTraders.emplace_back(randomStrat, i + 5, 2000.0, 100L);
+        randomTraders.push_back(new Trader(randomStrat, i + 5, 2000.0, 100L));
     }
-    for (auto& t : randomTraders) LOB.registerTrader(&t);
+    for (auto& t : randomTraders) LOB.registerTrader(t);
 
     LOB.registerTrader(new Trader{randomStrat, 999, 100000.0, 20000L});
 
@@ -104,19 +106,17 @@ int main()
         
             LOB.update();
             if (clock.now() == 30) {
-                Order whalePanic = { 999, 999, 10.0, 2000, Side::SELL, clock.now() };
-                LOB.processOrder(whalePanic, clock);
-                }
-
+                LOB.processOrder(999, 10.0, 2000, Side::SELL, clock);
+            }
         
             for (size_t i = 0; i < 10; i++)
             {
-                randomTraders[i].update(LOB, clock);
+                randomTraders[i]->update(LOB, clock);
             }
             
             for (size_t i = 0; i < 5; i++)
             {
-                trendTraders[i].update(LOB, clock);
+                trendTraders[i]->update(LOB, clock);
             }
         
             lobDirty = true;

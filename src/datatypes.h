@@ -42,3 +42,13 @@ struct Candle {
 	double open, high, low, close;
 	long startTime;
 };
+
+struct OrderEntry {
+	long id;
+	size_t index;
+};
+
+struct PriceLevel {
+	std::vector<OrderEntry> orderEntries;
+	size_t nextToMatch = 0;
+};

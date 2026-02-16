@@ -1,6 +1,9 @@
 #include <cmath>
 #include <random>
+#include <algorithm>
+#include <cstdlib>
 
+#include "datatypes.h"
 #include "TrendStrategy.h"
 #include "Trader.h"
 #include "LimitOrderBook.h"
@@ -73,8 +76,7 @@ void TrendStrategy::decide(Trader& trader, LimitOrderBook& LOB, Clock& clock)
 			canBuy
 		);
 
-		Order order = { 0, trader.getId(), executionPrice, willBuy, Side::BUY, clock.now()};
-		LOB.processOrder(order, clock);
+		LOB.processOrder(trader.getId(), executionPrice, willBuy, Side::BUY, clock);
 	}
 	else if (diff < -threshold && !buyingTheDip)
 	{
@@ -103,7 +105,6 @@ void TrendStrategy::decide(Trader& trader, LimitOrderBook& LOB, Clock& clock)
 			canSell
 		);
 
-		Order order = { 0, trader.getId(), executionPrice, willSell, Side::SELL, clock.now() };
-		LOB.processOrder(order, clock);
+		LOB.processOrder(trader.getId(), executionPrice, willSell, Side::SELL, clock);
 	}
 }

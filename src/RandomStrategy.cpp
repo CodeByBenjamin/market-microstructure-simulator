@@ -1,6 +1,6 @@
-#include <cmath>
 #include <random>
 
+#include "datatypes.h"
 #include "RandomStrategy.h"
 #include "Trader.h"
 #include "LimitOrderBook.h"
@@ -32,13 +32,15 @@ void RandomStrategy::decide(Trader& trader, LimitOrderBook& LOB, Clock& clock) {
     std::uniform_real_distribution<double> jitter(-0.005, 0.005);
     double myRefPrice = mid * (1.0 + jitter(rng));
 
-    Order bid = { 0, trader.getId(), myRefPrice - myOffset, volDist(rng), Side::BUY, clock.now() };
-    if (bid.price < 0.01) bid.price = 0.01;
-    trader.addActiveOrderId(LOB.processOrder(bid, clock));
+    double price = myRefPrice - myOffset;
 
-    Order ask = { 0, trader.getId(), myRefPrice + myOffset, volDist(rng), Side::SELL, clock.now() };
-    if (ask.price < 0.01) ask.price = 0.01;
-    trader.addActiveOrderId(LOB.processOrder(ask, clock));
+    if (price < 0.01) price = 0.01;
+    trader.addActiveOrderId(LOB.processOrder(trader.getId(), price, volDist(rng), Side::BUY, clock));
+
+    price = myRefPrice + myOffset;
+
+    if (price < 0.01) price = 0.01;
+    trader.addActiveOrderId(LOB.processOrder(trader.getId(), price, volDist(rng), Side::SELL, clock));
 
     //10% chance to make an aggresive trade
     std::uniform_int_distribution<int> chance(1, 100);
@@ -46,15 +48,13 @@ void RandomStrategy::decide(Trader& trader, LimitOrderBook& LOB, Clock& clock) {
         if (chance(rng) > 50) {
             if (!LOB.getAsks().empty()) {
                 double bestAsk = LOB.getAsks().begin()->first;
-                Order marketBuy = { 0, trader.getId(), bestAsk, 5, Side::BUY, clock.now() };
-                LOB.processOrder(marketBuy, clock);
+                LOB.processOrder(trader.getId(), bestAsk, 5, Side::BUY, clock);
             }
         }
         else {
             if (!LOB.getBids().empty()) {
                 double bestBid = LOB.getBids().begin()->first;
-                Order marketSell = { 0, trader.getId(), bestBid, 5, Side::SELL, clock.now() };
-                LOB.processOrder(marketSell, clock);
+                LOB.processOrder(trader.getId(), bestBid, 5, Side::SELL, clock);
             }
         }
     }

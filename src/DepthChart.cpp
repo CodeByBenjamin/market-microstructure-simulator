@@ -4,6 +4,8 @@
 #include <SFML/Graphics/RenderStates.hpp>
 #include <SFML/System/Vector2.hpp>
 #include <vector>
+#include <cmath>
+#include <algorithm>
 
 #include "datatypes.h"
 #include "LimitOrderBook.h"
@@ -21,8 +23,8 @@ void DepthChart::updateDepthPoints(const LimitOrderBook& LOB)
 {
     depthPoints.clear();
 
-    auto& bids = LOB.getBids();
-    auto& asks = LOB.getAsks();
+    const auto& bids = LOB.getBids();
+    const auto& asks = LOB.getAsks();
 
     if (bids.empty() || asks.empty()) {
         return;
@@ -36,7 +38,14 @@ void DepthChart::updateDepthPoints(const LimitOrderBook& LOB)
     //Adding points in reverse then reversing to avoid adding to front
     for (auto it = bids.begin(); it != bids.end(); ++it) {
         long levelVol = 0;
-        for (const auto& order : it->second) levelVol += order.volume;
+        for (const auto& entry : it->second.orderEntries)
+        {
+            const Order* order = LOB.getOrder(entry.id);
+            if (order == NULL)
+                continue;
+
+            levelVol += order->volume;
+        }
 
         runningBidVol += levelVol;
         float priceLevel = std::floor(it->first / binSize) * binSize;
@@ -55,10 +64,18 @@ void DepthChart::updateDepthPoints(const LimitOrderBook& LOB)
     long runningAskVol = 0;
     for (auto it = asks.begin(); it != asks.end(); ++it) {
         long levelVol = 0;
-        for (const auto& order : it->second) levelVol += order.volume;
-        runningAskVol += levelVol;
+        for (const auto& entry : it->second.orderEntries)
+        {
+            const Order* order = LOB.getOrder(entry.id);
+            if (order == NULL)
+                continue;
 
+            levelVol += order->volume;
+        }
+
+        runningAskVol += levelVol;
         float priceLevel = std::floor(it->first / binSize) * binSize;
+
         depthPoints.push_back({ priceLevel, runningAskVol });
     }
 
