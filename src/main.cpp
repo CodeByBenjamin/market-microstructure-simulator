@@ -4,7 +4,6 @@
 #include <SFML/Graphics/RenderWindow.hpp>
 #include <SFML/Graphics/RenderTarget.hpp>
 #include <SFML/Graphics/Font.hpp>
-#include <SFML/System/Vector2.hpp>
 #include <SFML/Window/VideoMode.hpp>
 #include <SFML/Window/WindowEnums.hpp>
 #include <SFML/Window/Event.hpp>
@@ -24,7 +23,7 @@
 int main()
 {
     auto window = sf::RenderWindow(sf::VideoMode({1920u, 1080u}), "Market simulator", sf::State::Fullscreen);
-    window.setFramerateLimit(60);
+    //window.setFramerateLimit(60);
 
     sf::Font font;
     if (!font.openFromFile("fonts/RobotoMono-Regular.ttf"))
@@ -40,7 +39,7 @@ int main()
     double realDt = 1.0 / ticksPerSec;
     auto lastTime = std::chrono::high_resolution_clock::now();
 
-    LOBPanel lobPanel;
+    LOBPanel lobPanel(window.getSize(), font);
 
     LimitOrderBook LOB;
     DepthChart depthChart(0.5);
@@ -48,15 +47,11 @@ int main()
     int candlesVisible = 100;
     CandleChart candleChart(binSize, candlesVisible);
 
-    float lobWidth = static_cast<float>(window.getSize().x * 0.25f);
-    float depthChartWidth = static_cast<float>(window.getSize().x * 0.25f);
-    float depthChartHeight = static_cast<float>(window.getSize().y * 0.25f);
-
     bool lobDirty = true;
 
     TrendStrategy* trendStrat = new TrendStrategy();
     std::vector<Trader*> trendTraders;
-    trendTraders.reserve(10);
+    trendTraders.reserve(5);
     for (int i = 0; i < 5; i++) {
         trendTraders.push_back(new Trader(trendStrat, i, 2000.0, 100L));
     }
@@ -64,8 +59,8 @@ int main()
 
     RandomStrategy* randomStrat = new RandomStrategy();
     std::vector<Trader*> randomTraders;
-    randomTraders.reserve(20);
-    for (int i = 0; i < 10; i++) {
+    randomTraders.reserve(25);
+    for (int i = 0; i < 25; i++) {
         randomTraders.push_back(new Trader(randomStrat, i + 5, 2000.0, 100L));
     }
     for (auto& t : randomTraders) LOB.registerTrader(t);
@@ -106,10 +101,10 @@ int main()
         
             LOB.update();
             if (clock.now() == 30) {
-                LOB.processOrder(999, 10.0, 2000, Side::SELL, clock);
+                LOB.processOrder(0L, 999, 10.0, 2000, Side::SELL, clock);
             }
-        
-            for (size_t i = 0; i < 10; i++)
+            
+            for (size_t i = 0; i < 25; i++)
             {
                 randomTraders[i]->update(LOB, clock);
             }
@@ -126,12 +121,13 @@ int main()
 
         if (lobDirty)
         {
-            depthChart.update(LOB, depthChartWidth, depthChartHeight, window.getSize());
-            candleChart.update(LOB, clock.now());
+            lobPanel.update(LOB, window);
+            depthChart.update(LOB, window.getSize());
+            candleChart.update(LOB, window.getSize(), clock.now());
             lobDirty = false;
         }
 
-        lobPanel.draw(window, font, LOB, lobWidth);
+        window.draw(lobPanel);
         window.draw(depthChart);
         window.draw(candleChart);
         window.display();

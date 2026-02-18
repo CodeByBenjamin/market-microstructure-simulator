@@ -27,6 +27,6 @@ class UIHelper
 public:
     static std::string formatPrice(double price);
 
-    static void drawLabel(sf::RenderTarget& target, const sf::Font& font, const std::string& label, int fontSize, float x, float y, UISnap snap, float offset, sf::Color color);
+    static void drawLabel(sf::RenderTarget& target, sf::Text text, float x, float y, UISnap snap, float offset);
     static void drawColoredRect(sf::RenderTarget& target, float x, float y, float width, float height, UISnap snap, float offset, sf::Color color);
 };

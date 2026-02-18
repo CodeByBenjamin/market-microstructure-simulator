@@ -7,7 +7,7 @@
 #include <SFML/System/Vector2.hpp>
 #include <deque>
 
-#include "Clock.h"
+#include "datatypes.h"
 
 class LimitOrderBook;
 
@@ -21,8 +21,11 @@ private:
 
 	int candlesVisible;
 	std::deque<Candle> candles;
+
+	sf::VertexArray candleQuads;
+	sf::VertexArray wickQuads;
 public:
 	CandleChart(long binSize, int candlesVisible);
 
-	void update(LimitOrderBook& LOB, long currentTick);
+	void update(LimitOrderBook& LOB, sf::Vector2u winSize, long currentTick);
 };

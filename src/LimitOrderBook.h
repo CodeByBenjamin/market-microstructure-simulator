@@ -51,10 +51,10 @@ public:
 
 	const std::vector<double>& getMidPriceHistory() const;
 
-	long processOrder(long traderId, double price, long volume, Side side, Clock& clock);
+	bool processOrder(long* id, long traderId, double price, long volume, Side side, Clock& clock);
 	void executeMatch(size_t index, Clock& clock);
 	void addLimitOrder(size_t index);
-	void cancelOrder(long orderId);
+	bool cancelOrder(long orderId);
 
 	void registerTrader(Trader* trader);
 

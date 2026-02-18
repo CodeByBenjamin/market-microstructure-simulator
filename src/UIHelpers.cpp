@@ -1,31 +1,23 @@
-#include <iomanip>
-#include <sstream>
 #include <string>
-#include <ios>
-#include <SFML/Graphics/RenderWindow.hpp>
 #include <SFML/Graphics/RenderTarget.hpp>
 #include <SFML/Graphics/Font.hpp>
 #include <SFML/Graphics/Color.hpp>
 #include <SFML/Graphics/Text.hpp>
 #include <SFML/Graphics/RectangleShape.hpp>
 #include <SFML/System/Vector2.hpp>
+#include <SFML/Graphics/Rect.hpp>
+#include <format>
+#include <cmath>
 
 #include "UIHelpers.h"
 
 std::string UIHelper::formatPrice(double price)
 {
-    std::stringstream ss;
-    ss << std::fixed << std::setprecision(2) << price;
-    return ss.str();
+    return std::format("{:.2f}", price);
 }
 
-void UIHelper::drawLabel(sf::RenderTarget& target, const sf::Font& font, const std::string& label, int fontSize, float x, float y, UISnap snap, float offset, sf::Color color)
+void UIHelper::drawLabel(sf::RenderTarget& target, sf::Text text, float x, float y, UISnap snap, float offset)
 {
-    sf::Text text(font);
-    text.setCharacterSize(fontSize);
-    text.setFillColor(color);
-    text.setString(label);
-
     sf::FloatRect bounds = text.getLocalBounds();
 
     switch (snap)
@@ -37,7 +29,7 @@ void UIHelper::drawLabel(sf::RenderTarget& target, const sf::Font& font, const s
         text.setOrigin({ std::round(bounds.size.x / 2.f), 0.f });
         break;
     case UISnap::Right:
-        text.setOrigin({ std::round(bounds.size.x), 0.f });        
+        text.setOrigin({ std::round(bounds.size.x), 0.f });
         break;
     }
 

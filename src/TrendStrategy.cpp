@@ -76,7 +76,7 @@ void TrendStrategy::decide(Trader& trader, LimitOrderBook& LOB, Clock& clock)
 			canBuy
 		);
 
-		LOB.processOrder(trader.getId(), executionPrice, willBuy, Side::BUY, clock);
+		LOB.processOrder(0L, trader.getId(), executionPrice, willBuy, Side::BUY, clock);
 	}
 	else if (diff < -threshold && !buyingTheDip)
 	{
@@ -105,6 +105,6 @@ void TrendStrategy::decide(Trader& trader, LimitOrderBook& LOB, Clock& clock)
 			canSell
 		);
 
-		LOB.processOrder(trader.getId(), executionPrice, willSell, Side::SELL, clock);
+		LOB.processOrder(0L, trader.getId(), executionPrice, willSell, Side::SELL, clock);
 	}
 }

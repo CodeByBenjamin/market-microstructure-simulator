@@ -12,9 +12,9 @@
 #include "DepthChart.h"
 #include "UIHelpers.h"
 
-DepthChart::DepthChart(float binSize) {
-    totalVolume = 0;
-    this->binSize = binSize;
+DepthChart::DepthChart(float binSize) 
+    : binSize(binSize)
+{
     bidTriangles.setPrimitiveType(sf::PrimitiveType::TriangleStrip);
     askTriangles.setPrimitiveType(sf::PrimitiveType::TriangleStrip);
 }
@@ -37,20 +37,16 @@ void DepthChart::updateDepthPoints(const LimitOrderBook& LOB)
 
     //Adding points in reverse then reversing to avoid adding to front
     for (auto it = bids.begin(); it != bids.end(); ++it) {
-        long levelVol = 0;
-        for (const auto& entry : it->second.orderEntries)
+
+        long levelVol = it->second.levelVolume;
+
+        if (levelVol != 0)
         {
-            const Order* order = LOB.getOrder(entry.id);
-            if (order == NULL)
-                continue;
+            runningBidVol += levelVol;
+            float priceLevel = std::floor(it->first / binSize) * binSize;
 
-            levelVol += order->volume;
+            tempBids.push_back({ priceLevel, runningBidVol });
         }
-
-        runningBidVol += levelVol;
-        float priceLevel = std::floor(it->first / binSize) * binSize;
-
-        tempBids.push_back({ priceLevel, runningBidVol });
     }
 
     for (auto it = tempBids.rbegin(); it != tempBids.rend(); ++it) {
@@ -63,26 +59,22 @@ void DepthChart::updateDepthPoints(const LimitOrderBook& LOB)
 
     long runningAskVol = 0;
     for (auto it = asks.begin(); it != asks.end(); ++it) {
-        long levelVol = 0;
-        for (const auto& entry : it->second.orderEntries)
+
+        long levelVol = it->second.levelVolume;
+
+        if (levelVol != 0)
         {
-            const Order* order = LOB.getOrder(entry.id);
-            if (order == NULL)
-                continue;
+            runningAskVol += levelVol;
+            float priceLevel = std::floor(it->first / binSize) * binSize;
 
-            levelVol += order->volume;
+            depthPoints.push_back({ priceLevel, runningAskVol });
         }
-
-        runningAskVol += levelVol;
-        float priceLevel = std::floor(it->first / binSize) * binSize;
-
-        depthPoints.push_back({ priceLevel, runningAskVol });
     }
 
     totalVolume = std::max(runningBidVol, runningAskVol);
 }
 
-void DepthChart::update(const LimitOrderBook& LOB, float chartWidth, float chartHeight, sf::Vector2u winSize) {
+void DepthChart::update(const LimitOrderBook& LOB, sf::Vector2u winSize) {
     updateDepthPoints(LOB);
     
     if (depthPoints.empty()) {
@@ -92,6 +84,9 @@ void DepthChart::update(const LimitOrderBook& LOB, float chartWidth, float chart
     }
 
     int offset = 0;
+
+    float chartWidth = static_cast<float>(winSize.x * 0.25f);
+    float chartHeight = static_cast<float>(winSize.y * 0.25f);
 
     float binWidth = chartWidth / static_cast<float>(depthPoints.size() - 1);
     float bottomOfChart = (float)winSize.y;

@@ -1,11 +1,10 @@
 #pragma once
 
-#include <map>
-#include <list>
+#include <SFML/Graphics/Text.hpp>
 #include <vector>
-#include <unordered_map>
-#include <functional>
-#include <cmath>
+#include <string>
+
+#include "UIHelpers.h"
 
 enum Side
 {
@@ -49,6 +48,8 @@ struct OrderEntry {
 };
 
 struct PriceLevel {
+	std::string priceLabel;
 	std::vector<OrderEntry> orderEntries;
 	size_t nextToMatch = 0;
+	long levelVolume = 0;
 };
