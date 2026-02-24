@@ -3,6 +3,7 @@
 #include <string>
 #include <algorithm>
 #include <cmath>
+
 #include "datatypes.h"
 #include "LOBPanel.h"
 #include "UIHelpers.h"
@@ -31,6 +32,11 @@ LOBPanel::LOBPanel(sf::Vector2u winSize, const sf::Font& f)
     panelSeperator.setPosition({ lobWidth, 0.f });
     panelSeperator.setSize({ 2.f, static_cast<float>(winSize.y) });
     panelSeperator.setFillColor(Theme::Border);
+
+    float yPos = currentY + (rowHeight + padding / 2);
+    bestPricesSeperator.setPosition({ 0.f, yPos });
+    bestPricesSeperator.setSize({ lobWidth, 2.f });
+    bestPricesSeperator.setFillColor(Theme::Accent);
 
     bidBars.setPrimitiveType(sf::PrimitiveType::Triangles);
     askBars.setPrimitiveType(sf::PrimitiveType::Triangles);
@@ -67,7 +73,7 @@ void LOBPanel::setupLabel(int index, const sf::Font& font, const std::string& st
     text.setPosition({ std::round(x + offset), std::round(y) });
 }
 
-void LOBPanel::update(const LimitOrderBook& LOB, sf::RenderWindow& window)
+void LOBPanel::update(const LimitOrderBook& LOB)
 {
     labelCount = 0;
     activeBids = 0;
@@ -82,19 +88,20 @@ void LOBPanel::update(const LimitOrderBook& LOB, sf::RenderWindow& window)
     const auto& bids = LOB.getBids();
     const auto& asks = LOB.getAsks();
 
-    if (bids.empty() || asks.empty())
-        return;
-
     // Main Prices
 
-    double bestBid = bids.begin()->first;
-    double bestAsk = asks.begin()->first;
-    double mid = (bestBid + bestAsk) / 2.0;
-    double spread = bestAsk - bestBid;
+    auto bestBid = LOB.bestBid();
+    if (!bestBid)
+        bestBid = 0;
+    auto bestAsk = LOB.bestAsk();
+    if (!bestAsk)
+        bestAsk = 0;
+    PriceTicks midPrice = LOB.midPrice();
+    PriceTicks spread = *bestAsk - *bestBid;
 
     float centerX = lobWidth / 2.f;
 
-    std::string fullPrice = UIHelper::formatPrice(mid);
+    std::string fullPrice = UIHelper::formatPrice(midPrice);
     size_t dotPos = fullPrice.find('.');
     std::string leftSide = fullPrice.substr(0, dotPos);
     std::string rightSide = fullPrice.substr(dotPos);
@@ -116,69 +123,74 @@ void LOBPanel::update(const LimitOrderBook& LOB, sf::RenderWindow& window)
     setupLabel(labelCount++, font, rightSide, 22, Theme::Accent,
         centerX, currentY / 2.f, UISnap::Left, -7.f);
 
-    long maxVol = std::max(LOB.getHighestVolume(BUY, maxCount), LOB.getHighestVolume(SELL, maxCount));
+    Quantity maxVol = std::max(LOB.getHighestVolume(BUY, maxCount), LOB.getHighestVolume(SELL, maxCount));
 
     if (maxVol == 0) return;
 
-    // BIDS LOOP
-    bidBars.resize(6 * maxCount);
     int count = 0;
-    for (auto it = bids.begin(); it != bids.end() && count < maxCount; ++it) {
-        if (it->second.orderEntries.empty()) continue;
-        long levelVol = it->second.levelVolume;
-        if (levelVol == 0) continue;
 
-        float fullPerc = static_cast<float>(levelVol) / maxVol;
-        float yPos = currentY + (rowHeight + padding) * count;
+    if (!bids.empty())
+    {
+        bidBars.resize(6 * maxCount);
+        for (auto it = bids.begin(); it != bids.end() && count < maxCount; ++it) {
+            if (it->second.orderEntries.empty()) continue;
+            Quantity levelVol = it->second.levelVolume;
+            if (levelVol == 0) continue;
 
-        bidBars[count * 6].position = { centerX, yPos };
-        bidBars[count * 6 + 1].position = { centerX - centerX * fullPerc, yPos };
-        bidBars[count * 6 + 2].position = { centerX, yPos + rowHeight };
-        bidBars[count * 6 + 3].position = { centerX, yPos + rowHeight };
-        bidBars[count * 6 + 4].position = { centerX - centerX * fullPerc, yPos + rowHeight };
-        bidBars[count * 6 + 5].position = { centerX - centerX * fullPerc, yPos };
+            float fullPerc = static_cast<float>(levelVol) / maxVol;
+            float yPos = currentY + (rowHeight + padding) * count;
 
-        for (int k = 0; k < 6; k++) bidBars[count * 6 + k].color = Theme::BidBG;
+            bidBars[count * 6].position = { centerX, yPos };
+            bidBars[count * 6 + 1].position = { centerX - centerX * fullPerc, yPos };
+            bidBars[count * 6 + 2].position = { centerX, yPos + rowHeight };
+            bidBars[count * 6 + 3].position = { centerX, yPos + rowHeight };
+            bidBars[count * 6 + 4].position = { centerX - centerX * fullPerc, yPos + rowHeight };
+            bidBars[count * 6 + 5].position = { centerX - centerX * fullPerc, yPos };
 
-        // Labels
-        setupLabel(labelCount++, font, it->second.priceLabel, 24, Theme::Bid,
-            centerX, yPos, UISnap::Right, -10.f);
+            for (int k = 0; k < 6; k++) bidBars[count * 6 + k].color = Theme::BidBG;
 
-        setupLabel(labelCount++, font, std::to_string(levelVol), 22, Theme::TextDim,
-            0.f, yPos, UISnap::Left, 10.f);
-        count++;
+            // Labels
+            setupLabel(labelCount++, font, it->second.priceLabel, 24, Theme::Bid,
+                centerX, yPos, UISnap::Right, -10.f);
+
+            setupLabel(labelCount++, font, std::to_string(levelVol), 22, Theme::TextDim,
+                0.f, yPos, UISnap::Left, 10.f);
+            count++;
+        }
+        activeBids = count;
     }
-    activeBids = count;
 
-    // ASKS LOOP
-    askBars.resize(6 * maxCount);
-    count = 0;
-    for (auto it = asks.begin(); it != asks.end() && count < maxCount; ++it) {
-        if (it->second.orderEntries.empty()) continue;
-        long levelVol = it->second.levelVolume;
-        if (levelVol == 0) continue;
+    if (!asks.empty())
+    {
+        askBars.resize(6 * maxCount);
+        count = 0;
+        for (auto it = asks.begin(); it != asks.end() && count < maxCount; ++it) {
+            if (it->second.orderEntries.empty()) continue;
+            Quantity levelVol = it->second.levelVolume;
+            if (levelVol == 0) continue;
 
-        float fullPerc = static_cast<float>(levelVol) / maxVol;
-        float yPos = currentY + (rowHeight + padding) * count;
+            float fullPerc = static_cast<float>(levelVol) / maxVol;
+            float yPos = currentY + (rowHeight + padding) * count;
 
-        askBars[count * 6].position = { centerX, yPos };
-        askBars[count * 6 + 1].position = { centerX + centerX * fullPerc, yPos };
-        askBars[count * 6 + 2].position = { centerX, yPos + rowHeight };
-        askBars[count * 6 + 3].position = { centerX, yPos + rowHeight };
-        askBars[count * 6 + 4].position = { centerX + centerX * fullPerc, yPos + rowHeight };
-        askBars[count * 6 + 5].position = { centerX + centerX * fullPerc, yPos };
+            askBars[count * 6].position = { centerX, yPos };
+            askBars[count * 6 + 1].position = { centerX + centerX * fullPerc, yPos };
+            askBars[count * 6 + 2].position = { centerX, yPos + rowHeight };
+            askBars[count * 6 + 3].position = { centerX, yPos + rowHeight };
+            askBars[count * 6 + 4].position = { centerX + centerX * fullPerc, yPos + rowHeight };
+            askBars[count * 6 + 5].position = { centerX + centerX * fullPerc, yPos };
 
-        for (int k = 0; k < 6; k++) askBars[count * 6 + k].color = Theme::AskBG;
+            for (int k = 0; k < 6; k++) askBars[count * 6 + k].color = Theme::AskBG;
 
-        // Labels
-        setupLabel(labelCount++, font, it->second.priceLabel, 24, Theme::Ask,
-            centerX, yPos, UISnap::Left, 10.f);
+            // Labels
+            setupLabel(labelCount++, font, it->second.priceLabel, 24, Theme::Ask,
+                centerX, yPos, UISnap::Left, 10.f);
 
-        setupLabel(labelCount++, font, std::to_string(levelVol), 22, Theme::TextDim,
-            lobWidth, yPos, UISnap::Right, -10.f);
-        count++;
+            setupLabel(labelCount++, font, std::to_string(levelVol), 22, Theme::TextDim,
+                lobWidth, yPos, UISnap::Right, -10.f);
+            count++;
+        }
+        activeAsks = count;
     }
-    activeAsks = count;
 }
 
 void LOBPanel::draw(sf::RenderTarget& target, sf::RenderStates states) const
@@ -186,6 +198,7 @@ void LOBPanel::draw(sf::RenderTarget& target, sf::RenderStates states) const
     target.draw(panel, states);
     target.draw(sideSeperator, states);
     target.draw(panelSeperator, states);
+    target.draw(bestPricesSeperator, states);
 
     if (activeBids > 0) {
         target.draw(&bidBars[0], activeBids * 6, sf::PrimitiveType::Triangles, states);

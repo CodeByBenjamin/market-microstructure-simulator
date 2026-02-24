@@ -19,6 +19,7 @@
 #include "TrendStrategy.h"
 #include "RandomStrategy.h"
 #include "CandleChart.h"
+#include "priceutils.h"
 
 int main()
 {
@@ -35,25 +36,26 @@ int main()
 
     double dt = 1.0; //Ticks per update
 
-    double ticksPerSec = 10.0;
+    Tick ticksPerSec = 10;
     double realDt = 1.0 / ticksPerSec;
     auto lastTime = std::chrono::high_resolution_clock::now();
 
-    LOBPanel lobPanel(window.getSize(), font);
-
     LimitOrderBook LOB;
-    DepthChart depthChart(0.5);
-    long binSize = ticksPerSec * 0.1;
-    int candlesVisible = 100;
-    CandleChart candleChart(binSize, candlesVisible);
+
+    LOBPanel lobPanel(window.getSize(), font);
+    DepthChart depthChart(window.getSize(), 50);
+    Tick binSize = ticksPerSec * 0.1;
+    int candlesVisible = 60;
+    CandleChart candleChart(font, binSize, candlesVisible);
 
     bool lobDirty = true;
 
+    //Traders
     TrendStrategy* trendStrat = new TrendStrategy();
     std::vector<Trader*> trendTraders;
     trendTraders.reserve(5);
     for (int i = 0; i < 5; i++) {
-        trendTraders.push_back(new Trader(trendStrat, i, 2000.0, 100L));
+        trendTraders.push_back(new Trader(trendStrat, i, toPriceTicks(2000), 100L));
     }
     for (auto& t : trendTraders) LOB.registerTrader(t);
 
@@ -61,11 +63,11 @@ int main()
     std::vector<Trader*> randomTraders;
     randomTraders.reserve(25);
     for (int i = 0; i < 25; i++) {
-        randomTraders.push_back(new Trader(randomStrat, i + 5, 2000.0, 100L));
+        randomTraders.push_back(new Trader(randomStrat, i + 5, toPriceTicks(2000), 100L));
     }
     for (auto& t : randomTraders) LOB.registerTrader(t);
 
-    LOB.registerTrader(new Trader{randomStrat, 999, 100000.0, 20000L});
+    LOB.registerTrader(new Trader{ randomStrat, 999, toPriceTicks(100000.0), 20000L });
 
     bool pauseSim = false;
 
@@ -101,7 +103,8 @@ int main()
         
             LOB.update();
             if (clock.now() == 30) {
-                LOB.processOrder(0L, 999, 10.0, 2000, Side::SELL, clock);
+                LOB.processOrder(999, toPriceTicks(10.0), 2000, Side::SELL, clock);
+                LOB.processOrder(999, toPriceTicks(15.0), 100, Side::BUY, clock);
             }
             
             for (size_t i = 0; i < 25; i++)
@@ -121,8 +124,8 @@ int main()
 
         if (lobDirty)
         {
-            lobPanel.update(LOB, window);
-            depthChart.update(LOB, window.getSize());
+            lobPanel.update(LOB);
+            depthChart.update(LOB);
             candleChart.update(LOB, window.getSize(), clock.now());
             lobDirty = false;
         }

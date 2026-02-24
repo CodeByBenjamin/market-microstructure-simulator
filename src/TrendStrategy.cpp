@@ -8,103 +8,102 @@
 #include "Trader.h"
 #include "LimitOrderBook.h"
 #include "Clock.h"
+#include "priceutils.h"
 
 void TrendStrategy::decide(Trader& trader, LimitOrderBook& LOB, Clock& clock)
 {
-	static std::mt19937 rng(std::random_device{}());
-	size_t depth = 100; //How many last trades to look at
+    static std::mt19937 rng(std::random_device{}());
+    const size_t depth = 100;
 
-	auto const& midPriceHistory = LOB.getMidPriceHistory();
+    if (clock.now() != 0 && clock.now() % 10 == 0 && trader.getOrderCount() > 10) {
+        trader.clearHalfOrders(LOB);
+    }
 
-	if (midPriceHistory.empty())
-		return;
+    auto const& midPriceHistory = LOB.getMidPriceHistory();
+    if (midPriceHistory.empty())
+        return;
 
-	double sum = 0;
-	size_t count = 0;
-	for (auto it = midPriceHistory.rbegin();
-		it != midPriceHistory.rend() && count < depth;
-		++it, ++count)
-	{
-		sum += *it;
-	}
+    double sumTicks = 0.0;
+    size_t count = 0;
 
-	size_t actualDepth = std::min(depth, midPriceHistory.size());
-	double avr = sum / actualDepth;
+    for (auto it = midPriceHistory.rbegin();
+        it != midPriceHistory.rend() && count < depth;
+        ++it, ++count)
+    {
+        sumTicks += (double)(*it);
+    }
 
-	if (avr <= 0.0) return;
+    const size_t actualDepth = std::min(depth, midPriceHistory.size());
+    const double avrTicks = sumTicks / (double)actualDepth;
+    if (avrTicks <= 0.0) return;
 
-	double currentPrice = midPriceHistory.back();
-	double diff = currentPrice - avr;
+    const double currentTicks = (double)midPriceHistory.back();
+    const double diffTicks = currentTicks - avrTicks;
 
-	double threshold = avr * 0.001;
+    const double thresholdTicks = avrTicks * 0.001;
 
-	bool buyingTheDip = false;
-	if (trader.getFunds() >= 10000) {
-		buyingTheDip = true;
-	}
+    const bool buyingTheDip = (trader.getFunds() >= toPriceTicks(10000.0));
+    const bool cashOut = (trader.getStocks() >= 500);
 
-	bool cashOut = false;
-	if (trader.getStocks() >= 500) {
-		cashOut = true;
-	}
+    auto makeVol = [&](long capacity, double perc) -> long {
+        if (capacity <= 0) return 0;
 
-	if (diff > threshold && !cashOut)
-	{
-		auto const& asks = LOB.getAsks();
-		if (asks.empty()) return;
+        Quantity minVol = (Quantity)std::floor((double)capacity * perc);
+        Quantity maxVol = (Quantity)std::floor((double)capacity * 0.3);
 
-		auto bestAskIt = asks.begin();
+        minVol = std::max(1L, minVol);
+        maxVol = std::max(1L, maxVol);
 
-		double executionPrice = bestAskIt->first * 1.05;
+        if (minVol >= maxVol) minVol = std::max(1L, maxVol / 2);
 
-		double funds = trader.getFunds();
-		long canBuy = static_cast<long>(std::floor(funds / executionPrice));
+        std::uniform_int_distribution<Quantity> dist(minVol, maxVol);
+        return std::clamp(dist(rng), 1L, capacity);
+        };
 
-		if (canBuy <= 0) return;
+    if (diffTicks > thresholdTicks && !cashOut)
+    {
+        auto bestAskTicks = LOB.bestAsk();
 
-		double perc = diff / avr;
+        if (!bestAskTicks)
+            return;
 
-		long minVol = static_cast<long>(canBuy * perc);
-		long maxVol = static_cast<long>(canBuy * 0.3);
+        const PriceTicks executionTicks =
+            (PriceTicks)std::llround((double)*bestAskTicks * 1.05);
 
-		if (minVol >= maxVol) minVol = maxVol / 2;
-		std::uniform_int_distribution<long> dist(std::max(1L, minVol), std::max(1L, maxVol));
+        const double funds = (double)trader.getFunds();
 
-		long willBuy = std::clamp(
-			dist(rng), 
-			1L,
-			canBuy
-		);
+        const Quantity canBuy = (Quantity)std::floor(funds / (double)executionTicks);
+        if (canBuy <= 0) return;
 
-		LOB.processOrder(0L, trader.getId(), executionPrice, willBuy, Side::BUY, clock);
-	}
-	else if (diff < -threshold && !buyingTheDip)
-	{
-		auto const& bids = LOB.getBids();
-		if (bids.empty()) return;
+        const double perc = diffTicks / avrTicks;
+        const Quantity willBuy = makeVol(canBuy, perc);
+        if (willBuy <= 0) return;
 
-		auto bestBidIt = bids.begin();
+        auto res = LOB.processOrder(trader.getId(), executionTicks, willBuy, Side::BUY, clock);
+        if (res.reason == RejectReason::None) {
+            trader.addActiveOrderId(res.orderId, executionTicks);
+        }
+    }
+    else if (diffTicks < -thresholdTicks && !buyingTheDip)
+    {
+        auto bestBidTicks = LOB.bestBid();
 
-		double executionPrice = bestBidIt->first * 0.95;
+        if (!bestBidTicks)
+            return;
 
-		long canSell = trader.getStocks();
+        const PriceTicks executionTicks =
+            (PriceTicks)std::llround((double)*bestBidTicks * 0.95);
 
-		if (canSell <= 0) return;
+        const Quantity canSell = trader.getStocks();
+        if (canSell <= 0) return;
 
-		double perc = std::abs(diff) / avr;
+        const double perc = std::abs(diffTicks) / avrTicks;
+        const Quantity willSell = makeVol(canSell, perc);
+        if (willSell <= 0) return;
 
-		long minVol = static_cast<long>(canSell * perc);
-		long maxVol = static_cast<long>(canSell * 0.3);
-
-		if (minVol >= maxVol) minVol = maxVol / 2;
-		std::uniform_int_distribution<long> dist(std::max(1L, minVol), std::max(1L, maxVol));
-
-		long willSell = std::clamp(
-			dist(rng),
-			1L,
-			canSell
-		);
-
-		LOB.processOrder(0L, trader.getId(), executionPrice, willSell, Side::SELL, clock);
-	}
+        auto res = LOB.processOrder(trader.getId(), executionTicks, willSell, Side::BUY, clock);
+        if (res.reason == RejectReason::None) {
+            trader.addActiveOrderId(res.orderId, executionTicks);
+        }
+    }
 }

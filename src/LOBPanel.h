@@ -6,6 +6,7 @@
 #include <vector>
 
 #include "LimitOrderBook.h"
+#include "UIHelpers.h"
 
 class LOBPanel : public sf::Drawable
 {
@@ -27,6 +28,7 @@ private:
     sf::RectangleShape panel;
     sf::RectangleShape sideSeperator;
     sf::RectangleShape panelSeperator;
+    sf::RectangleShape bestPricesSeperator;
 
     sf::VertexArray bidBars;
     sf::VertexArray askBars;
@@ -40,5 +42,5 @@ private:
 public:
     LOBPanel(sf::Vector2u winSize, const sf::Font& font);
 
-    void update(const LimitOrderBook& LOB, sf::RenderWindow& window);
+    void update(const LimitOrderBook& LOB);
 };

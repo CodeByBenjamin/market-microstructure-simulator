@@ -2,7 +2,9 @@
 
 #include <unordered_map>
 #include <map>
+#include <vector>
 
+#include "datatypes.h"
 #include "TradeStrategy.h"
 
 enum TraderType
@@ -17,28 +19,28 @@ class Trader {
 private:
 	TradeStrategy* strategy;
 
-	long id;
-	double funds;
-	long stocks;
+	TraderId id;
+	PriceTicks funds;
+	Quantity stocks;
 
-	std::map<double, std::vector<long>> ordersByPrice;
-	std::unordered_map<long, double> idToPrice;
+	std::map<PriceTicks, std::vector<OrderId>> ordersByPrice;
+	std::unordered_map<OrderId, PriceTicks> idToPrice;
 public:
-	Trader(TradeStrategy* strategy, long id, double funds, long stocks);
+	Trader(TradeStrategy* strategy, TraderId id, PriceTicks funds, Quantity stocks);
 
-	long getId() const;
-	double getFunds() const;
-	double getStocks() const;
-	const std::map<double, std::vector<long>>& getActiveOrderIds() const;
+	TraderId getId() const;
+	PriceTicks getFunds() const;
+	Quantity getStocks() const;
+	const std::map<PriceTicks, std::vector<OrderId>>& getActiveOrderIds() const;
 	size_t getOrderCount() const;
 
-	void changeFunds(double funds);
-	void changeStocks(long stocks);
+	void changeFunds(PriceTicks funds);
+	void changeStocks(Quantity stocks);
 	
 	void update(LimitOrderBook& LOB, Clock& clock);
 
-	void addActiveOrderId(long id, double price);
-	void removeActiveOrderId(long id);
-	void onOrderFinished(long id);
+	void addActiveOrderId(OrderId id, PriceTicks price);
+	void removeActiveOrderId(OrderId id);
+	void onOrderFinished(OrderId id);
 	void clearHalfOrders(LimitOrderBook& LOB);
 };

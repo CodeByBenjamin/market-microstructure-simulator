@@ -1,13 +1,13 @@
 #pragma once
 
+#include "datatypes.h"
+
 class Clock
 {
 private:
-	using Time = long long;
-
-	Time curTime = 0LL;
+	Tick curTime = 0;
 public:
-	Time now() const;
+	Tick now() const;
 
-	void advance(Time dt);
+	void advance(Tick dt);
 };

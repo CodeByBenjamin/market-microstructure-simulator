@@ -5,6 +5,7 @@
 #include <SFML/Graphics/RenderStates.hpp>
 #include <SFML/Graphics/VertexArray.hpp>
 #include <SFML/System/Vector2.hpp>
+#include <SFML/Graphics/RectangleShape.hpp>
 #include <vector>
 
 #include "datatypes.h"
@@ -15,15 +16,25 @@ class DepthChart : public sf::Drawable {
 private:
     virtual void draw(sf::RenderTarget& target, sf::RenderStates states) const override;
 
+    float chartWidth;
+    float chartHeight;
+    float bottomOfChart;
+    float startX;
+
+    float padX = 5.f;
+    float padY = 5.f;
+
     sf::VertexArray bidTriangles;
     sf::VertexArray askTriangles;
 
-    long totalVolume = 0;
-    float binSize;
+    sf::RectangleShape panel;
+
+    Quantity totalVolume = 0;
+    PriceTicks binSize;
     std::vector<DepthPoint> depthPoints;
 public:
-    DepthChart(float binSize);
+    DepthChart(sf::Vector2u winSize, PriceTicks binSize);
 
     void updateDepthPoints(const LimitOrderBook& LOB);
-    void update(const LimitOrderBook& LOB, sf::Vector2u winSize);
+    void update(const LimitOrderBook& LOB);
 };

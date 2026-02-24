@@ -1,73 +1,74 @@
 #include <random>
+#include <algorithm>
+#include <cmath>
 
 #include "datatypes.h"
 #include "RandomStrategy.h"
 #include "Trader.h"
 #include "LimitOrderBook.h"
 #include "Clock.h"
+#include "priceutils.h"
 
 void RandomStrategy::decide(Trader& trader, LimitOrderBook& LOB, Clock& clock) {
     static std::mt19937 rng(std::random_device{}());
 
-    double perceivedValue = 20.f;
+    const PriceTicks perceivedValueTicks = toPriceTicks(20);
 
-    double marketPrice = LOB.getMidPriceHistory().empty() ? perceivedValue : LOB.getMidPriceHistory().back();
+    const PriceTicks marketPriceTicks = LOB.midPrice();
 
-    double mid = (marketPrice * 0.7) + (perceivedValue * 0.3);
+    const PriceTicks midTicks = (PriceTicks)std::llround(
+        (double)marketPriceTicks * 0.7 + (double)perceivedValueTicks * 0.3
+    );
 
-    if (clock.now() % 4 == 0 && trader.getOrderCount() > 5)
-    {
+    if (clock.now() != 0 && clock.now() % 4 == 0 && trader.getOrderCount() > 5) {
         trader.clearHalfOrders(LOB);
     }
 
-    std::uniform_real_distribution<double> distDist(0.001, 0.01); // 0.01% to 1%
+    std::uniform_real_distribution<double> offsetPct(0.001, 0.01);   // 0.1% to 1%
+    std::uniform_real_distribution<double> jitterPct(-0.005, 0.005); // -0.5% to +0.5%
     std::uniform_int_distribution<long> volDist(5, 20);
 
-    double myOffset = mid * distDist(rng);
+    PriceTicks refTicks = (PriceTicks)std::llround((double)midTicks * (1.0 + jitterPct(rng)));
 
-    std::uniform_real_distribution<double> jitter(-0.005, 0.005);
-    double myRefPrice = mid * (1.0 + jitter(rng));
+    PriceTicks offTicks = (PriceTicks)std::llround((double)midTicks * offsetPct(rng));
+    offTicks = std::max<PriceTicks>(1, offTicks);
 
-    double price = myRefPrice - myOffset;
-
-    if (price < 0.01) price = 0.01;
-
-    long orderId;
-
-    if (LOB.processOrder(&orderId, trader.getId(), price, volDist(rng), Side::BUY, clock))
     {
-        trader.addActiveOrderId(orderId, price);
+        PriceTicks buyPriceTicks = refTicks - offTicks;
+        OrderResult orderResult = LOB.processOrder(trader.getId(), buyPriceTicks, volDist(rng), Side::BUY, clock);
+        if (orderResult.orderId != 0) {
+            trader.addActiveOrderId(orderResult.orderId, buyPriceTicks);
+        }
     }
 
-    price = myRefPrice + myOffset;
-
-    if (price < 0.01) price = 0.01;
-
-    if (LOB.processOrder(&orderId, trader.getId(), price, volDist(rng), Side::SELL, clock))
     {
-        trader.addActiveOrderId(orderId, price);
+        PriceTicks sellPriceTicks = refTicks + offTicks;
+        OrderResult orderResult = LOB.processOrder(trader.getId(), sellPriceTicks, volDist(rng), Side::SELL, clock);
+        if (orderResult.orderId != 0) {
+            trader.addActiveOrderId(orderResult.orderId, sellPriceTicks);
+        }
     }
 
-    //10% chance to make an aggresive trade
+    // 10% chance aggressive trade
     std::uniform_int_distribution<int> chance(1, 100);
     if (chance(rng) > 90) {
-        if (chance(rng) > 50) {
-            if (!LOB.getAsks().empty()) {
-                double bestAsk = LOB.getAsks().begin()->first;
+        const bool doBuy = (chance(rng) > 50);
 
-                if (LOB.processOrder(&orderId, trader.getId(), bestAsk, 5, Side::BUY, clock))
-                {
-                    trader.addActiveOrderId(orderId, price);
-                }     
+        if (doBuy) {
+            auto bestAskTicks = LOB.bestAsk();
+            if (bestAskTicks) {
+                auto res = LOB.processOrder(trader.getId(), *bestAskTicks, 5, Side::BUY, clock);
+                if (res.orderId != 0) {
+                    trader.addActiveOrderId(res.orderId, *bestAskTicks);
+                }
             }
         }
         else {
-            if (!LOB.getBids().empty()) {
-                double bestBid = LOB.getBids().begin()->first;
-
-                if (LOB.processOrder(&orderId, trader.getId(), bestBid, 5, Side::SELL, clock))
-                {
-                    trader.addActiveOrderId(orderId, price);
+            auto bestBidTicks = LOB.bestBid();
+            if (bestBidTicks) {
+                auto res = LOB.processOrder(trader.getId(), *bestBidTicks, 5, Side::SELL, clock);
+                if (res.orderId != 0) {
+                    trader.addActiveOrderId(res.orderId, *bestBidTicks);
                 }
             }
         }

@@ -1,29 +1,29 @@
 #include "Trader.h"
 #include "LimitOrderBook.h"
 
-Trader::Trader(TradeStrategy* strategy, long id, double funds, long stocks)
-	: strategy(strategy),
-	id(id),
-	funds(funds),
-	stocks(stocks)
+Trader::Trader(TradeStrategy* strategy, TraderId id, PriceTicks funds, Quantity stocks)
+    : strategy(strategy),
+    id(id),
+    funds(funds),
+    stocks(stocks)
 {}
 
-long Trader::getId() const
+TraderId Trader::getId() const
 {
 	return id;
 }
 
-double Trader::getFunds() const
+PriceTicks Trader::getFunds() const
 {
 	return funds;
 }
 
-double Trader::getStocks() const
+Quantity Trader::getStocks() const
 {
 	return stocks;
 }
 
-const std::map<double, std::vector<long>>& Trader::getActiveOrderIds() const
+const std::map<PriceTicks, std::vector<OrderId>>& Trader::getActiveOrderIds() const
 {
 	return ordersByPrice;
 }
@@ -33,12 +33,12 @@ size_t Trader::getOrderCount() const
     return idToPrice.size(); 
 }
 
-void Trader::changeFunds(double funds)
+void Trader::changeFunds(PriceTicks funds)
 {
 	this->funds += funds;
 }
 
-void Trader::changeStocks(long stocks)
+void Trader::changeStocks(Quantity stocks)
 {
 	this->stocks += stocks;
 }
@@ -48,18 +48,18 @@ void Trader::update(LimitOrderBook& LOB, Clock& clock)
 	strategy->decide(*this, LOB, clock);
 }
 
-void Trader::addActiveOrderId(long id, double price) {
+void Trader::addActiveOrderId(OrderId id, PriceTicks price) {
     idToPrice[id] = price;
 
     ordersByPrice[price].push_back(id);
 }
 
-void Trader::removeActiveOrderId(long id) 
+void Trader::removeActiveOrderId(OrderId id) 
 {
     auto itID = idToPrice.find(id);
     if (itID == idToPrice.end()) return;
 
-    double price = itID->second;
+    PriceTicks price = itID->second;
 
     auto itPrice = ordersByPrice.find(price);
     if (itPrice != ordersByPrice.end()) {
@@ -73,7 +73,7 @@ void Trader::removeActiveOrderId(long id)
     idToPrice.erase(itID);
 }
 
-void Trader::onOrderFinished(long id) 
+void Trader::onOrderFinished(OrderId id) 
 {
 	removeActiveOrderId(id);
 }
@@ -87,9 +87,8 @@ void Trader::clearHalfOrders(LimitOrderBook& LOB) {
         auto it = idToPrice.begin();
         if (it == idToPrice.end()) break;
 
-        long id = it->first;
+        OrderId id = it->first;
 
         LOB.cancelOrder(id);
-        this->removeActiveOrderId(id);
     }
 }

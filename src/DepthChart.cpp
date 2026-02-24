@@ -12,11 +12,20 @@
 #include "DepthChart.h"
 #include "UIHelpers.h"
 
-DepthChart::DepthChart(float binSize) 
+DepthChart::DepthChart(sf::Vector2u winSize, PriceTicks binSize)
     : binSize(binSize)
 {
     bidTriangles.setPrimitiveType(sf::PrimitiveType::TriangleStrip);
     askTriangles.setPrimitiveType(sf::PrimitiveType::TriangleStrip);
+
+    chartWidth = static_cast<float>(winSize.x * 0.25f);
+    chartHeight = static_cast<float>(winSize.y * 0.25f);
+    bottomOfChart = (float)winSize.y - padY;
+    startX = winSize.x - chartWidth - padX;
+
+    panel.setPosition({ winSize.x - chartWidth - 2 * padX, winSize.y - chartHeight - 2 * padY });
+    panel.setSize({ chartWidth + 2 * padX, chartWidth + 2 * padY });
+    panel.setFillColor(Theme::Surface);
 }
 
 void DepthChart::updateDepthPoints(const LimitOrderBook& LOB)
@@ -26,55 +35,60 @@ void DepthChart::updateDepthPoints(const LimitOrderBook& LOB)
     const auto& bids = LOB.getBids();
     const auto& asks = LOB.getAsks();
 
-    if (bids.empty() || asks.empty()) {
-        return;
-    }
-
     depthPoints.reserve(bids.size() + asks.size() + 1);
 
-    long runningBidVol = 0;
-    std::vector<DepthPoint> tempBids;
+    Quantity runningBidVol = 0;
 
-    //Adding points in reverse then reversing to avoid adding to front
-    for (auto it = bids.begin(); it != bids.end(); ++it) {
+    if (!bids.empty())
+    {
+        std::vector<DepthPoint> tempBids;
 
-        long levelVol = it->second.levelVolume;
+        //Adding points in reverse then reversing to avoid adding to front
+        for (auto it = bids.begin(); it != bids.end(); ++it) {
 
-        if (levelVol != 0)
-        {
-            runningBidVol += levelVol;
-            float priceLevel = std::floor(it->first / binSize) * binSize;
+            Quantity levelVol = it->second.levelVolume;
 
-            tempBids.push_back({ priceLevel, runningBidVol });
+            if (levelVol != 0)
+            {
+                runningBidVol += levelVol;
+                PriceTicks priceLevel = std::floor(it->first / binSize) * binSize;
+
+                tempBids.push_back({ priceLevel, runningBidVol });
+            }
+        }
+
+        for (auto it = tempBids.rbegin(); it != tempBids.rend(); ++it) {
+            depthPoints.push_back(*it);
         }
     }
 
-    for (auto it = tempBids.rbegin(); it != tempBids.rend(); ++it) {
-        depthPoints.push_back(*it);
-    }
-
     //Midpoint
-    float midPrice = (bids.begin()->first + asks.begin()->first) / 2.0f;
-    depthPoints.push_back({ std::floor(midPrice / binSize) * binSize, 0 });
+    PriceTicks midPrice = LOB.midPrice();
+    PriceTicks priceLevel = std::floor(midPrice / binSize) * binSize;
+    depthPoints.push_back({ priceLevel, 0 });
 
-    long runningAskVol = 0;
-    for (auto it = asks.begin(); it != asks.end(); ++it) {
+    Quantity runningAskVol = 0;
 
-        long levelVol = it->second.levelVolume;
+    if (!asks.empty())
+    {
+        for (auto it = asks.begin(); it != asks.end(); ++it) {
 
-        if (levelVol != 0)
-        {
-            runningAskVol += levelVol;
-            float priceLevel = std::floor(it->first / binSize) * binSize;
+            Quantity levelVol = it->second.levelVolume;
 
-            depthPoints.push_back({ priceLevel, runningAskVol });
+            if (levelVol != 0)
+            {
+                runningAskVol += levelVol;
+                PriceTicks priceLevel = std::floor(it->first / binSize) * binSize;
+
+                depthPoints.push_back({ priceLevel, runningAskVol });
+            }
         }
     }
 
     totalVolume = std::max(runningBidVol, runningAskVol);
 }
 
-void DepthChart::update(const LimitOrderBook& LOB, sf::Vector2u winSize) {
+void DepthChart::update(const LimitOrderBook& LOB) {
     updateDepthPoints(LOB);
     
     if (depthPoints.empty()) {
@@ -83,14 +97,7 @@ void DepthChart::update(const LimitOrderBook& LOB, sf::Vector2u winSize) {
         return;
     }
 
-    int offset = 0;
-
-    float chartWidth = static_cast<float>(winSize.x * 0.25f);
-    float chartHeight = static_cast<float>(winSize.y * 0.25f);
-
     float binWidth = chartWidth / static_cast<float>(depthPoints.size() - 1);
-    float bottomOfChart = (float)winSize.y;
-    float startX = winSize.x - chartWidth + offset;
 
     size_t splitIndex = 0;
     for (size_t i = 0; i < depthPoints.size(); i++) {
@@ -143,6 +150,8 @@ void DepthChart::update(const LimitOrderBook& LOB, sf::Vector2u winSize) {
 }
 
 void DepthChart::draw(sf::RenderTarget& target, sf::RenderStates states) const {
+    target.draw(panel, states);
+
     target.draw(bidTriangles, states);
     target.draw(askTriangles, states);
 }

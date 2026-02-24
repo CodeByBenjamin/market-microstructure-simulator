@@ -1,11 +1,15 @@
 #pragma once
 
-#include <SFML/Graphics/Text.hpp>
 #include <vector>
 #include <string>
 
-#include "UIHelpers.h"
-
+using TraderId = long;
+using TradeId = long;
+using OrderId = long;
+using Quantity = long;
+using PriceTicks = int64_t;
+using Tick = int64_t;
+	
 enum Side
 {
 	BUY,
@@ -14,36 +18,36 @@ enum Side
 
 struct Order
 {
-	long id;
-	long traderId;
-	double price;
-	long volume;
+	OrderId id;
+	TraderId traderId;
+	PriceTicks price;
+	Quantity volume;
 	Side side;
-	long long timeStamp;
+	Tick timeStamp;
 };
 
 struct TradeRecord
 {
-	long tradeId;
-	double price;
-	long volume;
+	TradeId tradeId;
+	PriceTicks price;
+	Quantity volume;
 	long buyerOrderId;
 	long sellerOrderId;
-	long long timeStamp;
+	Tick timeStamp;
 };
 
 struct DepthPoint {
-	float price;
-	long totalVolume;
+	PriceTicks price;
+	Quantity totalVolume;
 };
 
 struct Candle {
-	double open, high, low, close;
-	long startTime;
+	PriceTicks open, high, low, close;
+	Tick startTime;
 };
 
 struct OrderEntry {
-	long id;
+	OrderId id;
 	size_t index;
 };
 
@@ -51,5 +55,18 @@ struct PriceLevel {
 	std::string priceLabel;
 	std::vector<OrderEntry> orderEntries;
 	size_t nextToMatch = 0;
-	long levelVolume = 0;
+	Quantity levelVolume = 0;
+};
+
+enum class RejectReason {
+	None,
+	NoTrader,
+	InsufficientFunds,
+	InsufficientStocks,
+	Overflow
+};
+
+struct OrderResult {
+	OrderId orderId; // 0 if rejected
+	RejectReason reason; // None if accepted
 };

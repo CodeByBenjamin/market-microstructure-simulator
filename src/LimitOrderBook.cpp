@@ -2,34 +2,51 @@
 #include <vector>
 #include <algorithm>
 #include <utility>
-#include <cmath>
+#include <iostream>
 
 #include "datatypes.h"
 #include "LimitOrderBook.h"
 #include "Clock.h"
 #include "Trader.h"
 #include "UIHelpers.h"
+#include "priceutils.h"
 
 LimitOrderBook::LimitOrderBook()
 {
 	this->orderPoll.reserve(100000);
 }
 
-static double roundToTick(double price, double tickSize = 0.01) {
-	return std::round(price / tickSize) * tickSize;
+std::optional<PriceTicks> LimitOrderBook::bestBid() const {
+	if (bids.empty()) return std::nullopt;
+	return bids.begin()->first;
 }
 
-const std::map<double, PriceLevel, std::greater<double>>& LimitOrderBook::getBids() const
+std::optional<PriceTicks> LimitOrderBook::bestAsk() const {
+	if (asks.empty()) return std::nullopt;
+	return asks.begin()->first;
+}
+
+PriceTicks LimitOrderBook::midPrice() const {
+	if (bids.empty() && asks.empty())
+		return midPriceRecords.empty() ? toPriceTicks(20.0) : midPriceRecords.back();
+	if (bids.empty())
+		return asks.begin()->first;
+	if (asks.empty())
+		return bids.begin()->first;
+	return (bids.begin()->first + asks.begin()->first) / 2;
+}
+
+const std::map<PriceTicks, PriceLevel, std::greater<PriceTicks>>& LimitOrderBook::getBids() const
 {
 	return bids;
 }
 
-const std::map<double, PriceLevel>& LimitOrderBook::getAsks() const
+const std::map<PriceTicks, PriceLevel>& LimitOrderBook::getAsks() const
 {
 	return asks;
 }
 
-const Trader* LimitOrderBook::getTrader(long id) const {
+const Trader* LimitOrderBook::getTrader(TraderId id) const {
 	auto it = traders.find(id);
 	if (it != traders.end()) {
 		return it->second;
@@ -37,10 +54,10 @@ const Trader* LimitOrderBook::getTrader(long id) const {
 	return nullptr;
 }
 
-long LimitOrderBook::getHighestVolume(Side side, size_t priceLevels) const
+Quantity LimitOrderBook::getHighestVolume(Side side, size_t priceLevels) const
 {
-	long levelVol = 0;
-	long maxVol = 0;
+	Quantity levelVol = 0;
+	Quantity maxVol = 0;
 
 	int count = 0;
 
@@ -81,7 +98,7 @@ long LimitOrderBook::getHighestVolume(Side side, size_t priceLevels) const
 	return maxVol;
 }
 
-const Order* LimitOrderBook::getOrder(long id) const
+const Order* LimitOrderBook::getOrder(OrderId id) const
 {
 	auto it = orderLookup.find(id);
 
@@ -95,47 +112,56 @@ const Order* LimitOrderBook::getOrder(long id) const
 }
 
 void LimitOrderBook::update() {
-	double midPrice;
+	PriceTicks midTicks = 0;
 
 	if (bids.empty() && asks.empty()) {
-		midPrice = midPriceRecords.empty() ? 20.0 : midPriceRecords.back();
+		midTicks = midPriceRecords.empty() ? toPriceTicks(20.0) : midPriceRecords.back();
 	}
 	else if (bids.empty()) {
-		midPrice = asks.begin()->first;
+		midTicks = asks.begin()->first;
 	}
 	else if (asks.empty()) {
-		midPrice = bids.begin()->first;
+		midTicks = bids.begin()->first;
 	}
 	else {
-		midPrice = (bids.begin()->first + asks.begin()->first) / 2.0;
+		midTicks = (bids.begin()->first + asks.begin()->first) / 2;
 	}
 
-	midPriceRecords.push_back(midPrice);
+	midPriceRecords.push_back(midTicks);
 }
 
-const std::vector<double>& LimitOrderBook::getMidPriceHistory() const
+const std::vector<PriceTicks>& LimitOrderBook::getMidPriceHistory() const
 {
 	return midPriceRecords;
 }
 
-bool LimitOrderBook::processOrder(long* id, long traderId, double price, long volume, Side side, Clock& clock)
+OrderResult LimitOrderBook::processOrder(TraderId traderId, PriceTicks price, Quantity volume, Side side, Clock& clock)
 {
 	Order order = { 0, traderId, price, volume, side, clock.now() };
-	order.price = roundToTick(order.price);
 
-	Trader* trader = traders[traderId];
+	auto it = traders.find(traderId);
+	if (it == traders.end() || !it->second) 
+		return { 0, RejectReason::NoTrader };
+	Trader* trader = it->second;
 
 	if (order.side == Side::BUY)
 	{
-		if (trader->getFunds() < price * volume)
-			return false;
+		PriceTicks cost;
+		if (mul_overflow_i64(price, volume, cost))
+			return { 0, RejectReason::Overflow };
+		if (trader->getFunds() < cost)
+		{
+			return { 0, RejectReason::InsufficientFunds };
+		}
 
-		trader->changeFunds(-price * volume);
+		trader->changeFunds(-cost);
 	}
 	else
 	{
 		if (trader->getStocks() < volume)
-			return false;
+		{
+			return { 0, RejectReason::InsufficientStocks };
+		}
 
 		trader->changeStocks(-volume);
 	}
@@ -155,14 +181,10 @@ bool LimitOrderBook::processOrder(long* id, long traderId, double price, long vo
 		orderPoll.at(index) = order;
 	}
 
-	if (id)
-		*id = order.id;
-
-	executeMatch(index, clock);
-	return true;
+	return { executeMatch(index, clock) ? order.id : 0, RejectReason::None };
 }
 
-void LimitOrderBook::executeMatch(size_t index, Clock& clock)
+bool LimitOrderBook::executeMatch(size_t index, Clock& clock)
 {
 	Order& incomingOrder = orderPoll.at(index);
 
@@ -184,7 +206,7 @@ void LimitOrderBook::executeMatch(size_t index, Clock& clock)
 					continue;
 				}
 
-				long tradeVolume = std::min(incomingOrder.volume, restingOrder.volume);
+				Quantity tradeVolume = std::min(incomingOrder.volume, restingOrder.volume);
 
 				recordTrade(incomingOrder, restingOrder, tradeVolume, priceLevelIt->first, clock);
 				lastTradePrice = priceLevelIt->first;
@@ -199,7 +221,8 @@ void LimitOrderBook::executeMatch(size_t index, Clock& clock)
 					orderLookup.erase(restingOrder.id);
 					freeSlots.push(level.orderEntries[level.nextToMatch].index);
 
-					traders[restingOrder.traderId]->onOrderFinished(restingOrder.id);
+					auto it = traders.find(restingOrder.traderId);
+					if (it != traders.end() && it->second) it->second->onOrderFinished(restingOrder.id);
 
 					priceLevelIt->second.nextToMatch++;
 				}
@@ -231,7 +254,7 @@ void LimitOrderBook::executeMatch(size_t index, Clock& clock)
 					continue;
 				}
 
-				long tradeVolume = std::min(incomingOrder.volume, restingOrder.volume);
+				Quantity tradeVolume = std::min(incomingOrder.volume, restingOrder.volume);
 
 				recordTrade(restingOrder, incomingOrder, tradeVolume, priceLevelIt->first, clock);
 				lastTradePrice = priceLevelIt->first;
@@ -246,7 +269,8 @@ void LimitOrderBook::executeMatch(size_t index, Clock& clock)
 					orderLookup.erase(restingOrder.id);
 					freeSlots.push(level.orderEntries[level.nextToMatch].index);
 
-					traders[restingOrder.traderId]->onOrderFinished(restingOrder.id);
+					auto it = traders.find(restingOrder.traderId);
+					if (it != traders.end() && it->second) it->second->onOrderFinished(restingOrder.id);
 
 					priceLevelIt->second.nextToMatch++;
 				}
@@ -265,11 +289,15 @@ void LimitOrderBook::executeMatch(size_t index, Clock& clock)
 		addLimitOrder(index);
 	}
 	else {
-		 freeSlots.push(index);
+		incomingOrder.volume = 0;
+		freeSlots.push(index);
+		return false;
 	}
+
+	return true;
 }
 
-bool LimitOrderBook::cancelOrder(long orderId)
+bool LimitOrderBook::cancelOrder(OrderId orderId)
 {
 	auto indexIt = orderLookup.find(orderId);
 	if (indexIt == orderLookup.end())
@@ -282,11 +310,15 @@ bool LimitOrderBook::cancelOrder(long orderId)
 		return false;
 	}
 
-	Trader* trader = traders[orderToCancel.traderId];
+	auto itT = traders.find(orderToCancel.traderId);
+	if (itT == traders.end() || !itT->second) return false;
+	Trader* trader = itT->second;
 
 	if (orderToCancel.side == Side::BUY)
 	{
-		trader->changeFunds(orderToCancel.price * orderToCancel.volume);
+		PriceTicks refund = 0;
+		if (mul_overflow_i64(orderToCancel.price, orderToCancel.volume, refund)) return false;
+		trader->changeFunds(refund);
 	}
 	else
 	{
@@ -295,22 +327,29 @@ bool LimitOrderBook::cancelOrder(long orderId)
 
 	if (orderToCancel.side == Side::BUY)
 	{
-		const auto& priceLevelIt = bids.find(orderToCancel.price);
-		if (priceLevelIt != bids.end())
+		auto it = bids.find(orderToCancel.price);
+		if (it != bids.end())
 		{
-			priceLevelIt->second.levelVolume -= orderToCancel.volume;
+			it->second.levelVolume -= orderToCancel.volume;
+
+			if (it->second.levelVolume <= 0)
+				bids.erase(it);
 		}
 	}
 	else
 	{
-		const auto& priceLevelIt = asks.find(orderToCancel.price);
-		if (priceLevelIt != asks.end())
+		auto it = asks.find(orderToCancel.price);
+		if (it != asks.end())
 		{
-			priceLevelIt->second.levelVolume -= orderToCancel.volume;
+			it->second.levelVolume -= orderToCancel.volume;
+
+			if (it->second.levelVolume <= 0)
+				asks.erase(it);
 		}
 	}
 
 	orderToCancel.volume = 0;
+	trader->onOrderFinished(orderId);
 	freeSlots.push(indexIt->second);
 	orderLookup.erase(orderId);
 
@@ -352,22 +391,42 @@ void LimitOrderBook::registerTrader(Trader* trader) {
 	traders[trader->getId()] = trader;
 }
 
-void LimitOrderBook::recordTrade(const Order& bidOrder, const Order& askOrder, long volume, double price, Clock& clock)
+void LimitOrderBook::recordTrade(const Order& bidOrder, const Order& askOrder, Quantity volume, PriceTicks price, Clock& clock)
 {
 	TradeRecord tradeRecord = {};
-	tradeRecord.buyerOrderId = bidOrder.traderId;
-	tradeRecord.sellerOrderId = askOrder.traderId;
+	tradeRecord.buyerOrderId = bidOrder.id;
+	tradeRecord.sellerOrderId = askOrder.id;
 	tradeRecord.timeStamp = clock.now();
 	tradeRecord.tradeId = nextTradeId++;
 	tradeRecord.price = price;
 	tradeRecord.volume = volume;
 	pendingTrades.push_back(tradeRecord);
 
-	Trader* buyer = traders[bidOrder.traderId];
-	Trader* seller = traders[askOrder.traderId];
+	auto itT = traders.find(bidOrder.traderId);
+	if (itT == traders.end() || !itT->second) {
+		std::cout << "FATAL: missing buyer trader\n";
+		return;
+	}
+	Trader* buyer = itT->second;
 
-	double refund = (bidOrder.price - price) * volume;
-	double cashExchanged = price * volume;
+	itT = traders.find(askOrder.traderId);
+	if (itT == traders.end() || !itT->second) {
+		std::cout << "FATAL: missing seller trader\n";
+		return;
+	}
+	Trader* seller = itT->second;
+
+	PriceTicks refund;
+	if (mul_overflow_i64(bidOrder.price - price, volume, refund)) {
+		std::cout << "FATAL: overflow in recordTrade\n";
+		return;
+	}
+
+	PriceTicks cashExchanged;
+	if (mul_overflow_i64(price, volume, cashExchanged)) {
+		std::cout << "FATAL: overflow in recordTrade\n";
+		return;
+	}
 
 	if (buyer) {
 		buyer->changeStocks(volume);
@@ -381,7 +440,7 @@ void LimitOrderBook::recordTrade(const Order& bidOrder, const Order& askOrder, l
 
 std::vector<TradeRecord> LimitOrderBook::flushTrades()
 {
-	std::vector<TradeRecord> trades = std::move(pendingTrades);
-	pendingTrades.clear();
+	auto trades = std::move(pendingTrades);
+	pendingTrades = {};
 	return trades;
 }

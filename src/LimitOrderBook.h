@@ -4,6 +4,7 @@
 #include <unordered_map>
 #include <vector>
 #include <stack>
+#include <optional>
 
 #include "datatypes.h"
 #include "Clock.h"
@@ -18,20 +19,20 @@ class LimitOrderBook
 {
 private:
 	//Functioning
-	std::map<double, PriceLevel, std::greater<double>> bids;
-	std::map<double, PriceLevel> asks;
-	std::unordered_map<long, Trader*> traders;
+	std::map<PriceTicks, PriceLevel, std::greater<PriceTicks>> bids;
+	std::map<PriceTicks, PriceLevel> asks;
+	std::unordered_map<TraderId, Trader*> traders;
 
-	std::unordered_map<long, size_t> orderLookup;
+	std::unordered_map<OrderId, size_t> orderLookup;
 
 	std::vector<Order> orderPoll;
 	std::stack<size_t> freeSlots;
 
 	long nextOrderId = 1;
 
-	double lastTradePrice = 0.0;
+	int64_t lastTradePrice = 0;
 	std::vector<TradeRecord> pendingTrades;
-	std::vector<double> midPriceRecords;
+	std::vector<PriceTicks> midPriceRecords;
 
 	long nextTradeId = 1;
 
@@ -41,23 +42,27 @@ private:
 public:
 	LimitOrderBook();
 
-	const std::map<double, PriceLevel, std::greater<double>>& getBids() const;
-	const std::map<double, PriceLevel>& getAsks() const;
-	const Trader* getTrader(long id) const;
-	long getHighestVolume(Side side, size_t priceLevels) const;
-	const Order* getOrder(long id) const;
+	std::optional<PriceTicks> bestBid() const;
+	std::optional<PriceTicks> bestAsk() const;
+	PriceTicks midPrice() const;
+
+	const std::map<PriceTicks, PriceLevel, std::greater<PriceTicks>>& getBids() const;
+	const std::map<PriceTicks, PriceLevel>& getAsks() const;
+	const Trader* getTrader(TraderId id) const;
+	Quantity getHighestVolume(Side side, size_t priceLevels) const;
+	const Order* getOrder(OrderId id) const;
 
 	void update();
 
-	const std::vector<double>& getMidPriceHistory() const;
+	const std::vector<PriceTicks>& getMidPriceHistory() const;
 
-	bool processOrder(long* id, long traderId, double price, long volume, Side side, Clock& clock);
-	void executeMatch(size_t index, Clock& clock);
+	OrderResult processOrder(TraderId traderId, PriceTicks price, Quantity volume, Side side, Clock& clock);
+	bool executeMatch(size_t index, Clock& clock);
 	void addLimitOrder(size_t index);
-	bool cancelOrder(long orderId);
+	bool cancelOrder(OrderId orderId);
 
 	void registerTrader(Trader* trader);
 
-	void recordTrade(const Order& restingOrder, const Order& incomingOrder, long volume, double price, Clock& clock);
+	void recordTrade(const Order& restingOrder, const Order& incomingOrder, Quantity volume, PriceTicks price, Clock& clock);
 	std::vector<TradeRecord> flushTrades();
 };

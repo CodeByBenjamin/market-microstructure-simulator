@@ -1,19 +1,19 @@
 #include <string>
 #include <SFML/Graphics/RenderTarget.hpp>
-#include <SFML/Graphics/Font.hpp>
 #include <SFML/Graphics/Color.hpp>
 #include <SFML/Graphics/Text.hpp>
 #include <SFML/Graphics/RectangleShape.hpp>
 #include <SFML/System/Vector2.hpp>
 #include <SFML/Graphics/Rect.hpp>
-#include <format>
 #include <cmath>
+#include <format>
 
 #include "UIHelpers.h"
+#include "priceutils.h"
 
-std::string UIHelper::formatPrice(double price)
+std::string UIHelper::formatPrice(PriceTicks priceTicks)
 {
-    return std::format("{:.2f}", price);
+    return std::format("{:.2f}", toPrice(priceTicks));
 }
 
 void UIHelper::drawLabel(sf::RenderTarget& target, sf::Text text, float x, float y, UISnap snap, float offset)
