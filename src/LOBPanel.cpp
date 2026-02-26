@@ -1,5 +1,12 @@
 #include <SFML/Graphics/RenderWindow.hpp>
 #include <SFML/Graphics/Font.hpp>
+#include <SFML/Graphics/Color.hpp>
+#include <SFML/Graphics/PrimitiveType.hpp>
+#include <SFML/Graphics/Rect.hpp>
+#include <SFML/Graphics/RenderStates.hpp>
+#include <SFML/Graphics/RenderTarget.hpp>
+#include <SFML/Graphics/Text.hpp>
+#include <SFML/System/Vector2.hpp>
 #include <string>
 #include <algorithm>
 #include <cmath>
@@ -15,7 +22,7 @@ LOBPanel::LOBPanel(sf::Vector2u winSize, const sf::Font& f)
     activeBids(0),
     activeAsks(0)
 {
-    labels.reserve(8 * maxCount);
+    labels.reserve(static_cast<std::size_t>(maxCount) * 8);
 
     for (int i = 0; i < 8 * maxCount; ++i) {
         labels.emplace_back(font);
@@ -131,7 +138,7 @@ void LOBPanel::update(const LimitOrderBook& LOB)
 
     if (!bids.empty())
     {
-        bidBars.resize(6 * maxCount);
+        bidBars.resize(static_cast<std::size_t>(maxCount) * 6);
         for (auto it = bids.begin(); it != bids.end() && count < maxCount; ++it) {
             if (it->second.orderEntries.empty()) continue;
             Quantity levelVol = it->second.levelVolume;
@@ -140,14 +147,14 @@ void LOBPanel::update(const LimitOrderBook& LOB)
             float fullPerc = static_cast<float>(levelVol) / maxVol;
             float yPos = currentY + (rowHeight + padding) * count;
 
-            bidBars[count * 6].position = { centerX, yPos };
-            bidBars[count * 6 + 1].position = { centerX - centerX * fullPerc, yPos };
-            bidBars[count * 6 + 2].position = { centerX, yPos + rowHeight };
-            bidBars[count * 6 + 3].position = { centerX, yPos + rowHeight };
-            bidBars[count * 6 + 4].position = { centerX - centerX * fullPerc, yPos + rowHeight };
-            bidBars[count * 6 + 5].position = { centerX - centerX * fullPerc, yPos };
+            bidBars[static_cast<std::size_t>(count) * 6].position = { centerX, yPos };
+            bidBars[static_cast<std::size_t>(count) * 6 + 1].position = { centerX - centerX * fullPerc, yPos };
+            bidBars[static_cast<std::size_t>(count) * 6 + 2].position = { centerX, yPos + rowHeight };
+            bidBars[static_cast<std::size_t>(count) * 6 + 3].position = { centerX, yPos + rowHeight };
+            bidBars[static_cast<std::size_t>(count) * 6 + 4].position = { centerX - centerX * fullPerc, yPos + rowHeight };
+            bidBars[static_cast<std::size_t>(count) * 6 + 5].position = { centerX - centerX * fullPerc, yPos };
 
-            for (int k = 0; k < 6; k++) bidBars[count * 6 + k].color = Theme::BidBG;
+            for (int k = 0; k < 6; k++) bidBars[static_cast<std::size_t>(count) * 6 + k].color = Theme::BidBG;
 
             // Labels
             setupLabel(labelCount++, font, it->second.priceLabel, 24, Theme::Bid,
@@ -162,7 +169,7 @@ void LOBPanel::update(const LimitOrderBook& LOB)
 
     if (!asks.empty())
     {
-        askBars.resize(6 * maxCount);
+        askBars.resize(static_cast<std::size_t>(maxCount) * 6);
         count = 0;
         for (auto it = asks.begin(); it != asks.end() && count < maxCount; ++it) {
             if (it->second.orderEntries.empty()) continue;
@@ -172,14 +179,14 @@ void LOBPanel::update(const LimitOrderBook& LOB)
             float fullPerc = static_cast<float>(levelVol) / maxVol;
             float yPos = currentY + (rowHeight + padding) * count;
 
-            askBars[count * 6].position = { centerX, yPos };
-            askBars[count * 6 + 1].position = { centerX + centerX * fullPerc, yPos };
-            askBars[count * 6 + 2].position = { centerX, yPos + rowHeight };
-            askBars[count * 6 + 3].position = { centerX, yPos + rowHeight };
-            askBars[count * 6 + 4].position = { centerX + centerX * fullPerc, yPos + rowHeight };
-            askBars[count * 6 + 5].position = { centerX + centerX * fullPerc, yPos };
+            askBars[static_cast<std::size_t>(count) * 6].position = { centerX, yPos };
+            askBars[static_cast<std::size_t>(count) * 6 + 1].position = { centerX + centerX * fullPerc, yPos };
+            askBars[static_cast<std::size_t>(count) * 6 + 2].position = { centerX, yPos + rowHeight };
+            askBars[static_cast<std::size_t>(count) * 6 + 3].position = { centerX, yPos + rowHeight };
+            askBars[static_cast<std::size_t>(count) * 6 + 4].position = { centerX + centerX * fullPerc, yPos + rowHeight };
+            askBars[static_cast<std::size_t>(count) * 6 + 5].position = { centerX + centerX * fullPerc, yPos };
 
-            for (int k = 0; k < 6; k++) askBars[count * 6 + k].color = Theme::AskBG;
+            for (int k = 0; k < 6; k++) askBars[static_cast<std::size_t>(count) * 6 + k].color = Theme::AskBG;
 
             // Labels
             setupLabel(labelCount++, font, it->second.priceLabel, 24, Theme::Ask,
@@ -201,11 +208,11 @@ void LOBPanel::draw(sf::RenderTarget& target, sf::RenderStates states) const
     target.draw(bestPricesSeperator, states);
 
     if (activeBids > 0) {
-        target.draw(&bidBars[0], activeBids * 6, sf::PrimitiveType::Triangles, states);
+        target.draw(&bidBars[0], static_cast<std::size_t>(activeBids) * 6, sf::PrimitiveType::Triangles, states);
     }
 
     if (activeAsks > 0) {
-        target.draw(&askBars[0], activeAsks * 6, sf::PrimitiveType::Triangles, states);
+        target.draw(&askBars[0], static_cast<std::size_t>(activeAsks) * 6, sf::PrimitiveType::Triangles, states);
     }
 
     for (int i = 0; i < labelCount; i++) {

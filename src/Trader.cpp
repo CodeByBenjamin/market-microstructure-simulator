@@ -1,5 +1,11 @@
+#include <map>
+#include <vector>
+
 #include "Trader.h"
 #include "LimitOrderBook.h"
+#include "Clock.h"
+#include "datatypes.h"
+#include "TradeStrategy.h"
 
 Trader::Trader(TradeStrategy* strategy, TraderId id, PriceTicks funds, Quantity stocks)
     : strategy(strategy),
@@ -81,7 +87,7 @@ void Trader::onOrderFinished(OrderId id)
 void Trader::clearHalfOrders(LimitOrderBook& LOB) {
     if (idToPrice.empty()) return;
 
-    int numToCancel = std::round(idToPrice.size() * 0.5f);
+    int numToCancel = idToPrice.size() / 2;
 
     for (int i = 0; i < numToCancel; i++) {
         auto it = idToPrice.begin();
