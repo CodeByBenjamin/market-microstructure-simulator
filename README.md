@@ -1,4 +1,4 @@
-# Market Simulator
+# Market Microstructure Simulator
 
 A real-time limit order book and exchange simulator written in modern C++, featuring a custom SFML-based rendering engine.
 
