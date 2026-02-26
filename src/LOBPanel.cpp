@@ -36,7 +36,7 @@ LOBPanel::LOBPanel(sf::Vector2u winSize, const sf::Font& f)
     float yPos = currentY + (rowHeight + padding / 2);
     bestPricesSeperator.setPosition({ 0.f, yPos });
     bestPricesSeperator.setSize({ lobWidth, 2.f });
-    bestPricesSeperator.setFillColor(Theme::Accent);
+    bestPricesSeperator.setFillColor(Theme::AccentBG);
 
     bidBars.setPrimitiveType(sf::PrimitiveType::Triangles);
     askBars.setPrimitiveType(sf::PrimitiveType::Triangles);

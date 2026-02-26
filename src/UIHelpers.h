@@ -18,8 +18,9 @@ namespace Theme {
     inline const sf::Color Bid = sf::Color(72, 168, 100);  // Green
     inline const sf::Color Ask = sf::Color(188, 72, 72);   // Red
     inline const sf::Color BidBG = sf::Color(72, 168, 100, 40);  // BG Green
-    inline const sf::Color AskBG = sf::Color(188, 72, 72, 40);   // Bg Red
+    inline const sf::Color AskBG = sf::Color(188, 72, 72, 40);   // BG Red
     inline const sf::Color Accent = sf::Color(210, 153, 34);  // "Special" info
+    inline const sf::Color AccentBG = sf::Color(210, 153, 34, 40);  // "Special" info BG
 
     inline const sf::Color Wick = sf::Color(110, 118, 128);  //Wick color
 }
