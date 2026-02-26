@@ -51,6 +51,7 @@ mkdir build
 cd build
 cmake ..
 cmake --build .
+```
 
 Run the generated executable from the build directory.
 
