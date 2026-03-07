@@ -10,6 +10,7 @@
 namespace Theme {
     inline const sf::Color Background = sf::Color(23, 27, 36);   // Background color
     inline const sf::Color Surface = sf::Color(43, 43, 64);    // Panel backgrounds
+    inline const sf::Color BoxSurface = sf::Color(30, 30, 48);    // Box backgrounds
     inline const sf::Color Border = sf::Color(47, 51, 61);    // Dividers/Grid lines
 
     inline const sf::Color TextMain = sf::Color(242, 242, 242); // Primary numbers

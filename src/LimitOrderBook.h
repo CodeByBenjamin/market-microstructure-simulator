@@ -28,6 +28,8 @@ private:
 	std::vector<Order> orderPoll;
 	std::stack<size_t> freeSlots;
 
+	std::vector<size_t> ordersToProcess;
+
 	long nextOrderId = 1;
 
 	int64_t lastTradePrice = 0;
@@ -49,6 +51,7 @@ public:
 	const std::map<PriceTicks, PriceLevel, std::greater<PriceTicks>>& getBids() const;
 	const std::map<PriceTicks, PriceLevel>& getAsks() const;
 	const Trader* getTrader(TraderId id) const;
+	const std::unordered_map<TraderId, Trader*>& getTraders() const;
 	Quantity getHighestVolume(Side side, size_t priceLevels) const;
 	const Order* getOrder(OrderId id) const;
 
@@ -56,13 +59,14 @@ public:
 
 	const std::vector<PriceTicks>& getMidPriceHistory() const;
 
-	OrderResult processOrder(TraderId traderId, PriceTicks price, Quantity volume, Side side, Clock& clock);
-	bool executeMatch(size_t index, Clock& clock);
+	OrderResult registerOrder(TraderId traderId, PriceTicks price, Quantity volume, Side side, Clock& clock);;
+	void processOrders(Clock& clock);
+	void executeMatch(size_t index, Clock& clock);
 	void addLimitOrder(size_t index);
 	bool cancelOrder(OrderId orderId);
 
 	void registerTrader(Trader* trader);
 
-	void recordTrade(const Order& restingOrder, const Order& incomingOrder, Quantity volume, PriceTicks price, Clock& clock);
+	void recordTrade(const Order& restingOrder, const Order& incomingOrder, PriceTicks price, Quantity volume, Clock& clock);
 	std::vector<TradeRecord> flushTrades();
 };

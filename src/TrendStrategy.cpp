@@ -1,5 +1,4 @@
 #include <cmath>
-#include <random>
 #include <algorithm>
 #include <cstdlib>
 
@@ -9,11 +8,11 @@
 #include "LimitOrderBook.h"
 #include "Clock.h"
 #include "priceutils.h"
+#include "rng.h"
 
-void TrendStrategy::decide(Trader& trader, LimitOrderBook& LOB, Clock& clock)
+void TrendStrategy::decide(Trader& trader, LimitOrderBook& LOB, Clock& clock) 
 {
-    static std::mt19937 rng(std::random_device{}());
-    const size_t depth = 100;
+    const size_t depth = 30;
 
     if (clock.now() != 0 && clock.now() % 10 == 0 && trader.getOrderCount() > 10) {
         trader.clearHalfOrders(LOB);
@@ -42,9 +41,6 @@ void TrendStrategy::decide(Trader& trader, LimitOrderBook& LOB, Clock& clock)
 
     const double thresholdTicks = avrTicks * 0.001;
 
-    const bool buyingTheDip = (trader.getFunds() >= toPriceTicks(10000.0));
-    const bool cashOut = (trader.getStocks() >= 500);
-
     auto makeVol = [&](long capacity, double perc) -> long {
         if (capacity <= 0) return 0;
 
@@ -60,7 +56,7 @@ void TrendStrategy::decide(Trader& trader, LimitOrderBook& LOB, Clock& clock)
         return std::clamp(dist(rng), 1L, capacity);
         };
 
-    if (diffTicks > thresholdTicks && !cashOut)
+    if (diffTicks < -thresholdTicks)
     {
         auto bestAskTicks = LOB.bestAsk();
 
@@ -68,23 +64,23 @@ void TrendStrategy::decide(Trader& trader, LimitOrderBook& LOB, Clock& clock)
             return;
 
         const PriceTicks executionTicks =
-            (PriceTicks)std::llround((double)*bestAskTicks * 1.05);
+            (PriceTicks)std::llround((double)*bestAskTicks * 1.003);
 
         const double funds = (double)trader.getFunds();
 
         const Quantity canBuy = (Quantity)std::floor(funds / (double)executionTicks);
         if (canBuy <= 0) return;
 
-        const double perc = diffTicks / avrTicks;
+        const double perc = std::abs(diffTicks) / avrTicks;
         const Quantity willBuy = makeVol(canBuy, perc);
         if (willBuy <= 0) return;
 
-        auto res = LOB.processOrder(trader.getId(), executionTicks, willBuy, Side::BUY, clock);
+        auto res = LOB.registerOrder(trader.getId(), executionTicks, willBuy, Side::BUY, clock);
         if (res.reason == RejectReason::None) {
             trader.addActiveOrderId(res.orderId, executionTicks);
         }
     }
-    else if (diffTicks < -thresholdTicks && !buyingTheDip)
+    else if (diffTicks > thresholdTicks)
     {
         auto bestBidTicks = LOB.bestBid();
 
@@ -92,7 +88,7 @@ void TrendStrategy::decide(Trader& trader, LimitOrderBook& LOB, Clock& clock)
             return;
 
         const PriceTicks executionTicks =
-            (PriceTicks)std::llround((double)*bestBidTicks * 0.95);
+            (PriceTicks)std::llround((double)*bestBidTicks * 0.997);
 
         const Quantity canSell = trader.getStocks();
         if (canSell <= 0) return;
@@ -101,7 +97,7 @@ void TrendStrategy::decide(Trader& trader, LimitOrderBook& LOB, Clock& clock)
         const Quantity willSell = makeVol(canSell, perc);
         if (willSell <= 0) return;
 
-        auto res = LOB.processOrder(trader.getId(), executionTicks, willSell, Side::BUY, clock);
+        auto res = LOB.registerOrder(trader.getId(), executionTicks, willSell, Side::SELL, clock);
         if (res.reason == RejectReason::None) {
             trader.addActiveOrderId(res.orderId, executionTicks);
         }

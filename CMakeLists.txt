@@ -15,10 +15,19 @@ FetchContent_Declare(SFML
     SYSTEM)
 FetchContent_MakeAvailable(SFML)
 
-file(GLOB_RECURSE SOURCES CONFIGURE_DEPENDS "src/*.cpp")
-file(GLOB_RECURSE HEADERS CONFIGURE_DEPENDS "src/*.h")
+add_executable(main)
 
-add_executable(main ${SOURCES} ${HEADERS} "src/TradeStrategy.h" "src/RandomStrategy.h" "src/Trader.cpp" "src/TrendStrategy.cpp" "src/Clock.h" "src/Clock.cpp" "src/RandomStrategy.cpp" "src/CandleChart.h" "src/CandleChart.cpp" "src/priceutils.h")
+file(GLOB_RECURSE APP_SOURCES CONFIGURE_DEPENDS
+  "${CMAKE_CURRENT_SOURCE_DIR}/src/*.cpp"
+  "${CMAKE_CURRENT_SOURCE_DIR}/src/*.c"
+)
+
+file(GLOB_RECURSE APP_HEADERS CONFIGURE_DEPENDS
+  "${CMAKE_CURRENT_SOURCE_DIR}/src/*.h"
+  "${CMAKE_CURRENT_SOURCE_DIR}/src/*.hpp"
+)
+
+target_sources(main PRIVATE ${APP_SOURCES} ${APP_HEADERS} "src/rng.h")
 
 target_link_libraries(main PRIVATE SFML::Graphics)
 

@@ -18,13 +18,13 @@ DepthChart::DepthChart(sf::Vector2u winSize, PriceTicks binSize)
     bidTriangles.setPrimitiveType(sf::PrimitiveType::TriangleStrip);
     askTriangles.setPrimitiveType(sf::PrimitiveType::TriangleStrip);
 
-    chartWidth = static_cast<float>(winSize.x * 0.25f);
-    chartHeight = static_cast<float>(winSize.y * 0.25f);
+    chartWidth = static_cast<float>(winSize.x * 0.25f) - 2 * padX;
+    chartHeight = static_cast<float>(winSize.y * 0.25f) - 2 * padY;
     bottomOfChart = (float)winSize.y - padY;
     startX = winSize.x - chartWidth - padX;
 
-    panel.setPosition({ winSize.x - chartWidth - 2 * padX, winSize.y - chartHeight - 2 * padY });
-    panel.setSize({ chartWidth + 2 * padX, chartWidth + 2 * padY });
+    panel.setPosition({ static_cast<float>(winSize.x * 0.75f), static_cast<float>(winSize.y * 0.75f) });
+    panel.setSize({ static_cast<float>(winSize.x * 0.25f), static_cast<float>(winSize.y * 0.25f) });
     panel.setFillColor(Theme::Surface);
 }
 

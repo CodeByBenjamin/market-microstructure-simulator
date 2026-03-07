@@ -17,14 +17,15 @@
 #include "DepthChart.h"
 #include "Trader.h"
 #include "TrendStrategy.h"
-#include "RandomStrategy.h"
+#include "MarketMaker.h"
 #include "CandleChart.h"
 #include "priceutils.h"
+#include "TradersStatsPanel.h"
 
 int main()
 {
     auto window = sf::RenderWindow(sf::VideoMode({1920u, 1080u}), "Market simulator", sf::State::Fullscreen);
-    //window.setFramerateLimit(60);
+    window.setVerticalSyncEnabled(true);
 
     sf::Font font;
     if (!font.openFromFile("fonts/RobotoMono-Regular.ttf"))
@@ -36,7 +37,7 @@ int main()
 
     double dt = 1.0; //Ticks per update
 
-    Tick ticksPerSec = 10;
+    Tick ticksPerSec = 15;
     double realDt = 1.0 / ticksPerSec;
     auto lastTime = std::chrono::high_resolution_clock::now();
 
@@ -44,9 +45,10 @@ int main()
 
     LOBPanel lobPanel(window.getSize(), font);
     DepthChart depthChart(window.getSize(), 50);
-    Tick binSize = ticksPerSec * 0.1;
+    Tick binSize = ticksPerSec * 0.5;
     int candlesVisible = 60;
     CandleChart candleChart(font, binSize, candlesVisible);
+    TradersStatsPanel tradersStatsPanel(window.getSize(), font);
 
     bool lobDirty = true;
 
@@ -55,19 +57,17 @@ int main()
     std::vector<Trader*> trendTraders;
     trendTraders.reserve(5);
     for (int i = 0; i < 5; i++) {
-        trendTraders.push_back(new Trader(trendStrat, i, toPriceTicks(2000), 100L));
+        trendTraders.push_back(new Trader(trendStrat, TraderType::Trend, i, toPriceTicks(2000), 40L));
     }
     for (auto& t : trendTraders) LOB.registerTrader(t);
 
-    RandomStrategy* randomStrat = new RandomStrategy();
-    std::vector<Trader*> randomTraders;
-    randomTraders.reserve(25);
-    for (int i = 0; i < 25; i++) {
-        randomTraders.push_back(new Trader(randomStrat, i + 5, toPriceTicks(2000), 100L));
+    MarketMaker* maker = new MarketMaker();
+    std::vector<Trader*> marketMakers;
+    marketMakers.reserve(15);
+    for (int i = 0; i < 15; i++) {
+        marketMakers.push_back(new Trader(maker, TraderType::Maker, i + 5, toPriceTicks(2000), 100L));
     }
-    for (auto& t : randomTraders) LOB.registerTrader(t);
-
-    LOB.registerTrader(new Trader{ randomStrat, 999, toPriceTicks(100000.0), 20000L });
+    for (auto& t : marketMakers) LOB.registerTrader(t);
 
     bool pauseSim = false;
 
@@ -102,21 +102,19 @@ int main()
             elapsed = now - lastTime;
         
             LOB.update();
-            if (clock.now() == 30) {
-                LOB.processOrder(999, toPriceTicks(10.0), 2000, Side::SELL, clock);
-                LOB.processOrder(999, toPriceTicks(15.0), 100, Side::BUY, clock);
-            }
-            
-            for (size_t i = 0; i < 25; i++)
-            {
-                randomTraders[i]->update(LOB, clock);
-            }
-            
+
             for (size_t i = 0; i < 5; i++)
             {
                 trendTraders[i]->update(LOB, clock);
             }
-        
+            
+            for (size_t i = 0; i < 15; i++)
+            {
+                marketMakers[i]->update(LOB, clock);
+            }
+
+            LOB.processOrders(clock);   
+
             lobDirty = true;
         }
 
@@ -127,12 +125,14 @@ int main()
             lobPanel.update(LOB);
             depthChart.update(LOB);
             candleChart.update(LOB, window.getSize(), clock.now());
+            tradersStatsPanel.update(LOB);
             lobDirty = false;
         }
 
         window.draw(lobPanel);
         window.draw(depthChart);
         window.draw(candleChart);
+        window.draw(tradersStatsPanel);
         window.display();
     }
 }
