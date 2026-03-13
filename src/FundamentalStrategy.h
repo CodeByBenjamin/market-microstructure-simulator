@@ -2,7 +2,7 @@
 
 #include "TradeStrategy.h"
 
-class TrendStrategy : public TradeStrategy
+class FundamentalStrategy : public TradeStrategy
 {
 public:
 	void decide(Trader& trader, LimitOrderBook& LOB, Clock& clock) override;

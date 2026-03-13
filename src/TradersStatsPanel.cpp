@@ -20,19 +20,23 @@
 const char* TraderTypeNames[] =
 {
     "Market Maker",
-    "Trend Strategy"
+    "Contrarian Strategy",
+    "Noise Strategy",
+    "Fundamental Strategy",
+    "Momentum Strategy"
 };
 
 struct Totals {
     int traders = 0;
 
-    PriceTicks pnl = 0;
+    PriceTicks allFunds = 0;
+    Quantity allStocks = 0;
+    PriceTicks startEquity = 0;
 
-    int wins = 0;
-    int sells = 0;
+    PriceTicks winValue = 0;
+    PriceTicks sellValue = 0;
 
     PriceTicks entrySum = 0;
-    Quantity positionSum = 0;
 };
 
 TradersStatsPanel::TradersStatsPanel(sf::Vector2u winSize, const sf::Font& f)
@@ -89,45 +93,54 @@ void TradersStatsPanel::setupLabel(int index, const sf::Font& font, const std::s
 void TradersStatsPanel::update(const LimitOrderBook& LOB)
 {
     labelCount = 0;
-
-    const auto& traders = LOB.getTraders();
    
-    std::vector<Totals> totals(2);
+    std::vector<Totals> totals(5);
 
     boxCount = totals.size();
+
+    auto storeInfo = [&](int index, const TraderStats& stats, PriceTicks allFunds) {
+            PriceTicks result;
+        
+            totals[index].startEquity += stats.startEquity;
+            totals[index].allFunds += allFunds;
+            totals[index].allStocks += stats.oldPosition;
+            totals[index].winValue += stats.winSellValue;
+            totals[index].sellValue += stats.totalSellValue;
+            totals[index].traders++;
+            if (mul_overflow_i64(stats.avgEntry, stats.oldPosition, result)) {
+                std::cout << "FATAL: overflow in storeInfo\n";
+                return;
+            }
+            totals[index].entrySum += result;
+        };
 
     for (const auto& [id, trader] : LOB.getTraders())
     {
         auto stats = trader->getStats();
         auto type = trader->getType();
 
-        PriceTicks result;
+        PriceTicks funds = trader->getFunds();
+        PriceTicks lockedFunds = trader->getLockedFunds();
+
+        Quantity stocks = trader->getStocks();
+        Quantity lockedStocks = trader->getLockedStocks();
 
         switch (type)
         {
         case Maker:
-            totals[static_cast<int>(Maker)].pnl += stats.pnl;
-            totals[static_cast<int>(Maker)].wins += stats.wins;
-            totals[static_cast<int>(Maker)].sells += stats.sellFills;
-            totals[static_cast<int>(Maker)].traders++;
-            if (mul_overflow_i64(stats.avgEntry, stats.position, result)) {
-                std::cout << "FATAL: overflow in recordTrade\n";
-                return;
-            }
-            totals[static_cast<int>(Maker)].entrySum += result;
-            totals[static_cast<int>(Maker)].positionSum += stats.position;
+            storeInfo(static_cast<int>(Maker), stats, funds + lockedFunds);
             break;
-        case Trend:
-            totals[static_cast<int>(Trend)].pnl += stats.pnl;
-            totals[static_cast<int>(Trend)].wins += stats.wins;
-            totals[static_cast<int>(Trend)].sells += stats.sellFills;
-            totals[static_cast<int>(Trend)].traders++;
-            if (mul_overflow_i64(stats.avgEntry, stats.position, result)) {
-                std::cout << "FATAL: overflow in recordTrade\n";
-                return;
-            }
-            totals[static_cast<int>(Trend)].entrySum += result;
-            totals[static_cast<int>(Trend)].positionSum += stats.position;
+        case Contrarian:
+            storeInfo(static_cast<int>(Contrarian), stats, funds + lockedFunds);
+            break;
+        case Noise:
+            storeInfo(static_cast<int>(Noise), stats, funds + lockedFunds);
+            break;
+        case Fundamental:
+            storeInfo(static_cast<int>(Fundamental), stats, funds + lockedFunds);
+            break;
+        case Momentum:
+            storeInfo(static_cast<int>(Momentum), stats, funds + lockedFunds);
             break;
         default:
             break;
@@ -141,7 +154,7 @@ void TradersStatsPanel::update(const LimitOrderBook& LOB)
     float yPos;
 
     float boxWidth = panel.getSize().x - 2 * padding;
-    float boxHeight = (panel.getSize().y - 2 * padding) / (totals.size());
+    float boxHeight = (panel.getSize().y - 2 * padding - 15.f) / (totals.size());
 
     if (statBoxes.getVertexCount() != totals.size() * 6) {
         statBoxes.resize(totals.size() * 6);
@@ -160,53 +173,64 @@ void TradersStatsPanel::update(const LimitOrderBook& LOB)
 
         for (int k = 0; k < 6; k++) statBoxes[static_cast<std::size_t>(i) * 6 + k].color = Theme::BoxSurface;
 
-        int winrate = 0;
-        if (totals[i].sells != 0)
-            winrate = std::round((static_cast<float>(totals[i].wins) / totals[i].sells) * 100);
+        int profSellPct = 0;
+        if (totals[i].sellValue != 0)
+            profSellPct = std::round((static_cast<double>(totals[i].winValue) / totals[i].sellValue) * 100);
+
+        profSellPct = std::clamp(profSellPct, 0, 100);
 
         PriceTicks avgEntry = 0;
-        if (totals[i].positionSum != 0)
-            avgEntry = totals[i].entrySum / totals[i].positionSum;
+        if (totals[i].allStocks != 0)
+            avgEntry = totals[i].entrySum / totals[i].allStocks;
 
         // Labels
-        setupLabel(labelCount++, font, std::string(TraderTypeNames[i]), 26, Theme::TextMain, xPos, yPos, UISnap::Left, 10.f);
+        setupLabel(labelCount++, font, std::string(TraderTypeNames[i]), 22, Theme::TextMain, xPos, yPos, UISnap::Left, 10.f);
+         
+        PriceTicks equity = 0;
+        if (mul_overflow_i64(LOB.midPrice(), totals[i].allStocks, equity)) {
+            std::cout << "FATAL: overflow in equityCal\n";
+            return;
+        }
+        equity += totals[i].allFunds;
+
+        PriceTicks pnl = equity - totals[i].startEquity;
 
         const char* space = " ";
         sf::Color pnlColor = Theme::Bid;
-        if (totals[i].pnl < 0)
+        if (pnl < 0)
         {
             space = "";
             pnlColor = Theme::Ask;
         }
 
-        sf::Color winrateColor;
-        if (winrate < 40)
+        sf::Color profSellPctColor;
+        if (profSellPct < 40)
         {
-            winrateColor = Theme::Ask;
+            profSellPctColor = Theme::Ask;
         }
-        else if (winrate < 60)
+        else if (profSellPct < 60)
         {
-            winrateColor = Theme::TextMain;
+            profSellPctColor = Theme::TextMain;
         }
         else
         {
-            winrateColor = Theme::Bid;
+            profSellPctColor = Theme::Bid;
         }
 
-        setupLabel(labelCount++, font, "Traders", 22, Theme::TextMain, xPos, yPos + 50.f, UISnap::Left, 10.f);
-        setupLabel(labelCount++, font, " " + std::to_string(totals[i].traders), 22, Theme::TextMain, xPos + 200.f, yPos + 50.f, UISnap::Left, 0.f);
+        setupLabel(labelCount++, font, "Traders", 18, Theme::TextMain, xPos, yPos + 50.f, UISnap::Left, 10.f);
+        setupLabel(labelCount++, font, " " + std::to_string(totals[i].traders), 18, Theme::TextMain, xPos + 200.f, yPos + 50.f, UISnap::Left, 0.f);
 
-        setupLabel(labelCount++, font, "PnL", 22, Theme::TextMain, xPos, yPos + 80.f, UISnap::Left, 10.f);
-        setupLabel(labelCount++, font, space + UIHelper::formatPrice(totals[i].pnl), 22, pnlColor, xPos + 200.f, yPos + 80.f, UISnap::Left, 0.f);
+        setupLabel(labelCount++, font, "PnL $", 18, Theme::TextMain, xPos, yPos + 70.f, UISnap::Left, 10.f);
+        setupLabel(labelCount++, font, space + UIHelper::formatPrice(pnl) + "$", 18, pnlColor, xPos + 200.f, yPos + 70.f, UISnap::Left, 0.f);
 
-        setupLabel(labelCount++, font, "Winrate", 22, Theme::TextMain, xPos, yPos + 110.f, UISnap::Left, 10.f);
-        setupLabel(labelCount++, font, " " + std::to_string(winrate) + "%", 22, winrateColor, xPos + 200.f, yPos + 110.f, UISnap::Left, 0.f);
+        setupLabel(labelCount++, font, "Prof. Sell %", 18, Theme::TextMain, xPos, yPos + 90.f, UISnap::Left, 10.f);
+        setupLabel(labelCount++, font, " " + std::to_string(profSellPct) + "%", 18, profSellPctColor, xPos + 200.f, yPos + 90.f, UISnap::Left, 0.f);
 
-        setupLabel(labelCount++, font, "Avg. Entry", 22, Theme::TextMain, xPos, yPos + 140.f, UISnap::Left, 10.f);
-        setupLabel(labelCount++, font, " " + UIHelper::formatPrice(avgEntry), 22, Theme::TextMain, xPos + 200.f, yPos + 140.f, UISnap::Left, 0.f);
+        setupLabel(labelCount++, font, "Avg. Entry $", 18, Theme::TextMain, xPos, yPos + 110.f, UISnap::Left, 10.f);
+        setupLabel(labelCount++, font, " " + UIHelper::formatPrice(avgEntry) + "$", 18, Theme::TextMain, xPos + 200.f, yPos + 110.f, UISnap::Left, 0.f);
 
-        setupLabel(labelCount++, font, "Inventory", 22, Theme::TextMain, xPos, yPos + 170.f, UISnap::Left, 10.f);
-        setupLabel(labelCount++, font, " " + std::to_string(totals[i].positionSum), 22, Theme::TextMain, xPos + 200.f, yPos + 170.f, UISnap::Left, 0.f);
+        setupLabel(labelCount++, font, "Inventory", 18, Theme::TextMain, xPos, yPos + 130.f, UISnap::Left, 10.f);
+        setupLabel(labelCount++, font, " " + std::to_string(totals[i].allStocks), 18, Theme::TextMain, xPos + 200.f, yPos + 130.f, UISnap::Left, 0.f);
     }
 }
 

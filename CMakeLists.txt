@@ -27,7 +27,7 @@ file(GLOB_RECURSE APP_HEADERS CONFIGURE_DEPENDS
   "${CMAKE_CURRENT_SOURCE_DIR}/src/*.hpp"
 )
 
-target_sources(main PRIVATE ${APP_SOURCES} ${APP_HEADERS} "src/rng.h")
+target_sources(main PRIVATE ${APP_SOURCES} ${APP_HEADERS} "src/rng.h" "src/NoiseStrategy.h" "src/NoiseStrategy.cpp" "src/FundamentalStrategy.cpp" "src/FundamentalStrategy.h" "src/MomentumStrategy.cpp")
 
 target_link_libraries(main PRIVATE SFML::Graphics)
 

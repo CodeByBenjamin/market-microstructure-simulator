@@ -1,5 +1,6 @@
 #include <algorithm>
 #include <cmath>
+#include <cstdlib>
 
 #include "datatypes.h"
 #include "MarketMaker.h"
@@ -11,81 +12,89 @@
 
 void MarketMaker::decide(Trader& trader, LimitOrderBook& LOB, Clock& clock)
 {
-    const size_t depth = 30;
+    trader.clearOrdersPerc(LOB, 0.3f);
 
-    if (clock.now() != 0 && clock.now() % 4 == 0 && trader.getOrderCount() > 5) {
-        trader.clearHalfOrders(LOB);
+    const PriceTicks fairValue = 2000;
+    const PriceTicks spread = 4;
+    const Quantity size = 3;
+    const Quantity targetInv = 35;
+    const size_t depth = 20;
+
+    PriceTicks mid = LOB.midPrice();
+
+    auto const& history = LOB.getMidPriceHistory(); 
+    PriceTicks avg = mid; 
+
+    if (!history.empty()) 
+    { 
+        PriceTicks sum = 0; 
+        size_t count = 0; 
+
+        for (auto it = history.rbegin(); it != history.rend() && count < depth; ++it, ++count) 
+            sum += *it; 
+
+        if (count > 0) 
+            avg = sum / count; 
     }
 
-    auto const& midPriceHistory = LOB.getMidPriceHistory();
-    if (midPriceHistory.empty())
-        return;
+    PriceTicks ref = (mid > 0) ? 
+        static_cast<PriceTicks>(std::llround(0.3 * fairValue + 0.7 * avg)) : fairValue;
 
-    double sumTicks = 0.0;
-    size_t count = 0;
+    long long invDiff =
+        static_cast<long long>(trader.getStocks()) - static_cast<long long>(targetInv);
 
-    for (auto it = midPriceHistory.rbegin();
-        it != midPriceHistory.rend() && count < depth;
-        ++it, ++count)
+    PriceTicks skew = static_cast<PriceTicks>(invDiff / 6);
+    skew = std::clamp<PriceTicks>(skew, -6, 6);
+
+    PriceTicks bid = ref - spread - skew;
+    PriceTicks ask = ref + spread - skew;
+
+    bid = std::max<PriceTicks>(1, bid);
+    ask = std::max<PriceTicks>(bid + 1, ask);
+
+    Quantity buyCap =
+        trader.getFunds() / bid;
+
+    Quantity sellCap =
+        trader.getStocks();
+
+    Quantity bidSize = std::min(size, buyCap);
+    Quantity askSize = std::min(size, sellCap);
+
+    if (invDiff > 6) {
+        bidSize = std::min<Quantity>(1, bidSize);
+        askSize = std::min<Quantity>(size + 1, sellCap);
+    }
+    else if (invDiff < -6) {
+        askSize = std::min<Quantity>(1, askSize);
+        bidSize = std::min<Quantity>(size + 1, buyCap);
+    }
+
+    if (buyCap > 0)
     {
-        sumTicks += (double)(*it);
+        auto r = LOB.registerOrder(
+            trader.getId(),
+            bid,
+            std::min(bidSize, buyCap),
+            Side::BUY,
+            clock
+        );
+
+        if (r.orderId)
+            trader.addActiveOrderId(r.orderId, bid);
     }
 
-    const size_t actualDepth = std::min(depth, midPriceHistory.size());
-    const double avrTicks = sumTicks / (double)actualDepth;
-    if (avrTicks <= 0.0) return;
-
-    const PriceTicks marketPriceTicks = LOB.midPrice();
-
-    const PriceTicks midTicks = (PriceTicks)std::llround(
-        (double)marketPriceTicks * 0.7 + (double)avrTicks * 0.3
-    );
-
-    std::uniform_int_distribution<PriceTicks> offsetPct(2, 5);
-    std::uniform_int_distribution<PriceTicks> jitterPct(1, 2);
-
-    PriceTicks refTicks = midTicks + jitterPct(rng);
-
-    PriceTicks offTicks = midTicks + offsetPct(rng);
-
+    if (sellCap > 0)
     {
-        PriceTicks buyPriceTicks = refTicks - offTicks;
-        OrderResult orderResult = LOB.registerOrder(trader.getId(), buyPriceTicks, volDist(rng), Side::BUY, clock);
-        if (orderResult.orderId != 0) {
-            trader.addActiveOrderId(orderResult.orderId, buyPriceTicks);
-        }
-    }
+        auto r = LOB.registerOrder(
+            trader.getId(),
+            ask,
+            std::min(askSize, sellCap),
+            Side::SELL,
+            clock
+        );
 
-    {
-        PriceTicks sellPriceTicks = refTicks + offTicks;
-        OrderResult orderResult = LOB.registerOrder(trader.getId(), sellPriceTicks, volDist(rng), Side::SELL, clock);
-        if (orderResult.orderId != 0) {
-            trader.addActiveOrderId(orderResult.orderId, sellPriceTicks);
-        }
-    }
-
-    // 10% chance aggressive trade
-    std::uniform_int_distribution<int> chance(1, 100);
-    if (chance(rng) > 90) {
-        const bool doBuy = (chance(rng) > 50);
-
-        if (doBuy) {
-            auto bestAskTicks = LOB.bestAsk();
-            if (bestAskTicks) {
-                auto res = LOB.registerOrder(trader.getId(), *bestAskTicks, 5, Side::BUY, clock);
-                if (res.orderId != 0) {
-                    trader.addActiveOrderId(res.orderId, *bestAskTicks);
-                }
-            }
-        }
-        else {
-            auto bestBidTicks = LOB.bestBid();
-            if (bestBidTicks) {
-                auto res = LOB.registerOrder(trader.getId(), *bestBidTicks, 5, Side::SELL, clock);
-                if (res.orderId != 0) {
-                    trader.addActiveOrderId(res.orderId, *bestBidTicks);
-                }
-            }
-        }
+        if (r.orderId)
+            trader.addActiveOrderId(r.orderId, ask);
     }
 }

@@ -10,6 +10,9 @@
 #include "Clock.h"
 #include "Trader.h"
 
+extern PriceTicks tradePriceSum;
+extern Quantity tradeCount;
+
 namespace sf {
     class RenderWindow;
     class Font;

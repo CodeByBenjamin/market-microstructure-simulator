@@ -454,6 +454,10 @@ void LimitOrderBook::recordTrade(const Order& bidOrder, const Order& askOrder, P
 		return;
 	}
 
+	tradeCount++;
+
+	tradePriceSum += price;
+
 	if (buyer) {
 		PriceTicks lockedUsed = 0;
 		if (mul_overflow_i64(bidOrder.price, volume, lockedUsed)) {
@@ -465,14 +469,14 @@ void LimitOrderBook::recordTrade(const Order& bidOrder, const Order& askOrder, P
 		buyer->unlockFunds(refund);
 		buyer->changeStocks(volume);
 
-		buyer->onTradeFilled(*this, BUY, price, volume);
+		buyer->onTradeFilled(BUY, price, volume);
 	}
 
 	if (seller) {
 		seller->changeLockedStocks(-volume);
 		seller->changeFunds(cashExchanged);
 
-		seller->onTradeFilled(*this, SELL, price, volume);
+		seller->onTradeFilled(SELL, price, volume);
 	}
 }
 
