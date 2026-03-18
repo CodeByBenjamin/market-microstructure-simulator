@@ -8,7 +8,7 @@
 #include "LimitOrderBook.h"
 #include "UIHelpers.h"
 
-class LOBPanel : public sf::Drawable
+class LobPanel : public sf::Drawable
 {
 private:
     virtual void draw(sf::RenderTarget& target, sf::RenderStates states) const override;
@@ -40,7 +40,7 @@ private:
         float x, float y, UISnap snap, float offset);
 
 public:
-    LOBPanel(sf::Vector2u winSize, const sf::Font& font);
+    LobPanel(sf::Vector2u winSize, const sf::Font& font);
 
-    void update(const LimitOrderBook& LOB);
+    void update(const LimitOrderBook& lob);
 };

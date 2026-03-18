@@ -19,7 +19,7 @@ namespace
     }
 }
 
-void NoiseStrategy::decide(Trader& trader, LimitOrderBook& LOB, Clock& clock)
+void NoiseStrategy::decide(Trader& trader, LimitOrderBook& lob, Clock& clock)
 {
     std::bernoulli_distribution tradeChance(0.5);
     if (!tradeChance(rng))
@@ -29,7 +29,7 @@ void NoiseStrategy::decide(Trader& trader, LimitOrderBook& LOB, Clock& clock)
 
     if (now != 0 && (now + trader.getId()) % 10 == 0 && trader.getOrderCount() > 3)
     {
-        trader.clearOrdersPerc(LOB, 0.3f);
+        trader.clearOrdersPerc(lob, 0.3f);
     }
 
     std::uniform_int_distribution<int> sideDist(0, 1);
@@ -52,7 +52,7 @@ void NoiseStrategy::decide(Trader& trader, LimitOrderBook& LOB, Clock& clock)
     {
         if (side == Side::BUY)
         {
-            const auto bestAsk = LOB.bestAsk();
+            const auto bestAsk = lob.bestAsk();
             if (!bestAsk)
                 return;
 
@@ -64,7 +64,7 @@ void NoiseStrategy::decide(Trader& trader, LimitOrderBook& LOB, Clock& clock)
             if (qty == 0)
                 return;
 
-            auto res = LOB.registerOrder(trader.getId(), orderPrice, qty, Side::BUY, clock);
+            auto res = lob.registerOrder(trader.getId(), orderPrice, qty, Side::BUY, clock);
             if (res.reason == RejectReason::None && res.orderId != 0)
             {
                 trader.addActiveOrderId(res.orderId, orderPrice);
@@ -72,13 +72,13 @@ void NoiseStrategy::decide(Trader& trader, LimitOrderBook& LOB, Clock& clock)
         }
         else
         {
-            const auto bestBid = LOB.bestBid();
+            const auto bestBid = lob.bestBid();
             if (!bestBid)
                 return;
 
             const PriceTicks orderPrice = *bestBid;
 
-            auto res = LOB.registerOrder(trader.getId(), orderPrice, qty, Side::SELL, clock);
+            auto res = lob.registerOrder(trader.getId(), orderPrice, qty, Side::SELL, clock);
             if (res.reason == RejectReason::None && res.orderId != 0)
             {
                 trader.addActiveOrderId(res.orderId, orderPrice);
@@ -87,7 +87,7 @@ void NoiseStrategy::decide(Trader& trader, LimitOrderBook& LOB, Clock& clock)
     }
     else
     {
-        PriceTicks mid = LOB.midPrice();
+        PriceTicks mid = lob.midPrice();
         if (mid <= 0)
             return;
 
@@ -100,7 +100,7 @@ void NoiseStrategy::decide(Trader& trader, LimitOrderBook& LOB, Clock& clock)
                 static_cast<PriceTicks>(clampMin<long long>(
                     static_cast<long long>(mid) - static_cast<long long>(offset), 1LL));
 
-            auto res = LOB.registerOrder(trader.getId(), orderPrice, qty, Side::BUY, clock);
+            auto res = lob.registerOrder(trader.getId(), orderPrice, qty, Side::BUY, clock);
             if (res.reason == RejectReason::None && res.orderId != 0)
             {
                 trader.addActiveOrderId(res.orderId, orderPrice);
@@ -112,7 +112,7 @@ void NoiseStrategy::decide(Trader& trader, LimitOrderBook& LOB, Clock& clock)
                 static_cast<PriceTicks>(clampMin<long long>(
                     static_cast<long long>(mid) + static_cast<long long>(offset), 1LL));
 
-            auto res = LOB.registerOrder(trader.getId(), orderPrice, qty, Side::SELL, clock);
+            auto res = lob.registerOrder(trader.getId(), orderPrice, qty, Side::SELL, clock);
             if (res.reason == RejectReason::None && res.orderId != 0)
             {
                 trader.addActiveOrderId(res.orderId, orderPrice);

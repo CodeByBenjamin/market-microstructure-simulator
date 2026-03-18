@@ -10,7 +10,7 @@
 #include "priceutils.h"
 #include "rng.h"
 
-void ContrarianStrategy::decide(Trader& trader, LimitOrderBook& LOB, Clock& clock)
+void ContrarianStrategy::decide(Trader& trader, LimitOrderBook& lob, Clock& clock)
 {
     std::bernoulli_distribution tradeChance(0.15);
     if (!tradeChance(rng))
@@ -20,13 +20,13 @@ void ContrarianStrategy::decide(Trader& trader, LimitOrderBook& LOB, Clock& cloc
 
     if (now != 0 && (now + trader.getId()) % 10 == 0 && trader.getOrderCount() > 3)
     {
-        trader.clearOrdersPerc(LOB, 0.5f);
+        trader.clearOrdersPerc(lob, 0.5f);
     }
 
     const size_t depth = 8;
     const Quantity maxInv = 35;
 
-    auto const& history = LOB.getMidPriceHistory();
+    auto const& history = lob.getMidPriceHistory();
     if (history.empty())
         return;
 
@@ -92,7 +92,7 @@ void ContrarianStrategy::decide(Trader& trader, LimitOrderBook& LOB, Clock& cloc
 
     if (diff < -threshold)
     {
-        auto bestAsk = LOB.bestAsk();
+        auto bestAsk = lob.bestAsk();
         if (!bestAsk)
             return;
 
@@ -113,13 +113,13 @@ void ContrarianStrategy::decide(Trader& trader, LimitOrderBook& LOB, Clock& cloc
         if (willBuy <= 0)
             return;
 
-        auto res = LOB.registerOrder(trader.getId(), price, willBuy, Side::BUY, clock);
+        auto res = lob.registerOrder(trader.getId(), price, willBuy, Side::BUY, clock);
         if (res.reason == RejectReason::None && res.orderId != 0)
             trader.addActiveOrderId(res.orderId, price);
     }
     else if (diff > threshold)
     {
-        auto bestBid = LOB.bestBid();
+        auto bestBid = lob.bestBid();
         if (!bestBid)
             return;
 
@@ -134,7 +134,7 @@ void ContrarianStrategy::decide(Trader& trader, LimitOrderBook& LOB, Clock& cloc
         if (willSell <= 0)
             return;
 
-        auto res = LOB.registerOrder(trader.getId(), price, willSell, Side::SELL, clock);
+        auto res = lob.registerOrder(trader.getId(), price, willSell, Side::SELL, clock);
         if (res.reason == RejectReason::None && res.orderId != 0)
             trader.addActiveOrderId(res.orderId, price);
     }

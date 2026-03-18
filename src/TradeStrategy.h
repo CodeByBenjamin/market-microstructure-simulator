@@ -7,5 +7,6 @@ class Clock;
 class TradeStrategy
 {
 public:
-	virtual void decide(Trader& trader, LimitOrderBook& LOB, Clock& clock) = 0;
+	virtual ~TradeStrategy() = default;
+	virtual void decide(Trader& trader, LimitOrderBook& lob, Clock& clock) = 0;
 };

@@ -67,6 +67,6 @@ enum class RejectReason {
 };
 
 struct OrderResult {
-	OrderId orderId; // 0 if rejected
-	RejectReason reason; // None if accepted
+	OrderId orderId;
+	RejectReason reason;
 };

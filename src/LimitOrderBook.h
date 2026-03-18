@@ -1,14 +1,15 @@
 #pragma once
 
 #include <map>
+#include <optional>
+#include <stack>
 #include <unordered_map>
 #include <vector>
-#include <stack>
-#include <optional>
 
 #include "datatypes.h"
-#include "Clock.h"
-#include "Trader.h"
+
+class Trader;
+class Clock;
 
 extern PriceTicks tradePriceSum;
 extern Quantity tradeCount;
@@ -18,58 +19,71 @@ namespace sf {
     class Font;
 }
 
-class LimitOrderBook
-{
+// Central matching engine for the simulator.
+// Owns order storage and book state.
+// Traders are registered as non-owning pointers; lifetime is managed externally.
+class LimitOrderBook {
 private:
-	//Functioning
-	std::map<PriceTicks, PriceLevel, std::greater<PriceTicks>> bids;
-	std::map<PriceTicks, PriceLevel> asks;
-	std::unordered_map<TraderId, Trader*> traders;
+    std::map<PriceTicks, PriceLevel, std::greater<PriceTicks>> bids;
+    std::map<PriceTicks, PriceLevel> asks;
 
-	std::unordered_map<OrderId, size_t> orderLookup;
+    // Non-owning trader registry. Lifetime is managed by the simulation.
+    std::unordered_map<TraderId, Trader*> traders;
 
-	std::vector<Order> orderPoll;
-	std::stack<size_t> freeSlots;
+    // Active order ID -> index in orderPool.
+    std::unordered_map<OrderId, size_t> orderLookup;
 
-	std::vector<size_t> ordersToProcess;
+    // Active and recycled order storage.
+    std::vector<Order> orderPool;
 
-	long nextOrderId = 1;
+    // Reusable vacant indices in orderPool.
+    std::stack<size_t> freeSlots;
 
-	int64_t lastTradePrice = 0;
-	std::vector<TradeRecord> pendingTrades;
-	std::vector<PriceTicks> midPriceRecords;
+    // Orders submitted this step, processed in randomized order.
+    std::vector<size_t> pendingOrderIndices;
 
-	long nextTradeId = 1;
+    OrderId nextOrderId = 1;
+    TradeId nextTradeId = 1;
 
-	//Outside Info
-	long totalBidVolume = 0;
-	long totalAskVolume = 0;
+    PriceTicks lastTradePrice = 0;
+
+    // Trades generated since last flushTrades().
+    std::vector<TradeRecord> pendingTrades;
+
+    std::vector<PriceTicks> midPriceRecords;
+
+    void executeMatch(size_t index, Clock& clock);
+    void addLimitOrder(size_t index);
+    void recordTrade(const Order& bidOrder, const Order& askOrder, PriceTicks price, Quantity volume, Clock& clock);
+
 public:
-	LimitOrderBook();
+    // ----- Construction -----
+    LimitOrderBook();
 
-	std::optional<PriceTicks> bestBid() const;
-	std::optional<PriceTicks> bestAsk() const;
-	PriceTicks midPrice() const;
+    // ----- Market state accessors -----
+    [[nodiscard]] std::optional<PriceTicks> bestBid() const;
+    [[nodiscard]] std::optional<PriceTicks> bestAsk() const;
+    [[nodiscard]] PriceTicks midPrice() const;
 
-	const std::map<PriceTicks, PriceLevel, std::greater<PriceTicks>>& getBids() const;
-	const std::map<PriceTicks, PriceLevel>& getAsks() const;
-	const Trader* getTrader(TraderId id) const;
-	const std::unordered_map<TraderId, Trader*>& getTraders() const;
-	Quantity getHighestVolume(Side side, size_t priceLevels) const;
-	const Order* getOrder(OrderId id) const;
+    [[nodiscard]] const std::map<PriceTicks, PriceLevel, std::greater<PriceTicks>>& getBids() const;
+    [[nodiscard]] const std::map<PriceTicks, PriceLevel>& getAsks() const;
+    [[nodiscard]] const Trader* getTrader(TraderId id) const;
+    [[nodiscard]] const std::unordered_map<TraderId, Trader*>& getTraders() const;
+    [[nodiscard]] Quantity getHighestVolume(Side side, size_t priceLevels) const;
+    [[nodiscard]] const Order* getOrder(OrderId id) const;
+    [[nodiscard]] const std::vector<PriceTicks>& getMidPriceHistory() const;
 
-	void update();
+    // ----- Simulation lifecycle -----
+    void update();
+    void processOrders(Clock& clock);
 
-	const std::vector<PriceTicks>& getMidPriceHistory() const;
+    // ----- Order entry / cancellation -----
+    [[nodiscard]] OrderResult registerOrder(TraderId traderId, PriceTicks price, Quantity volume, Side side, Clock& clock);
+    [[nodiscard]] bool cancelOrder(OrderId orderId);
 
-	OrderResult registerOrder(TraderId traderId, PriceTicks price, Quantity volume, Side side, Clock& clock);;
-	void processOrders(Clock& clock);
-	void executeMatch(size_t index, Clock& clock);
-	void addLimitOrder(size_t index);
-	bool cancelOrder(OrderId orderId);
+    // ----- Trader registry -----
+    void registerTrader(Trader* trader);
 
-	void registerTrader(Trader* trader);
-
-	void recordTrade(const Order& restingOrder, const Order& incomingOrder, PriceTicks price, Quantity volume, Clock& clock);
-	std::vector<TradeRecord> flushTrades();
+    // ----- Trade output -----
+    [[nodiscard]] std::vector<TradeRecord> flushTrades();
 };

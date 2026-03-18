@@ -12,11 +12,11 @@
 #include <cmath>
 
 #include "datatypes.h"
-#include "LOBPanel.h"
+#include "LobPanel.h"
 #include "UIHelpers.h"
 #include "LimitOrderBook.h"
 
-LOBPanel::LOBPanel(sf::Vector2u winSize, const sf::Font& f)
+LobPanel::LobPanel(sf::Vector2u winSize, const sf::Font& f)
     : font(f),
     lobWidth(static_cast<float>(winSize.x * 0.25f)),
     activeBids(0),
@@ -49,7 +49,7 @@ LOBPanel::LOBPanel(sf::Vector2u winSize, const sf::Font& f)
     askBars.setPrimitiveType(sf::PrimitiveType::Triangles);
 }
 
-void LOBPanel::setupLabel(int index, const sf::Font& font, const std::string& str,
+void LobPanel::setupLabel(int index, const sf::Font& font, const std::string& str,
     unsigned int size, sf::Color color,
     float x, float y, UISnap snap, float offset)
 {
@@ -80,7 +80,7 @@ void LOBPanel::setupLabel(int index, const sf::Font& font, const std::string& st
     text.setPosition({ std::round(x + offset), std::round(y) });
 }
 
-void LOBPanel::update(const LimitOrderBook& LOB)
+void LobPanel::update(const LimitOrderBook& lob)
 {
     labelCount = 0;
     activeBids = 0;
@@ -92,18 +92,18 @@ void LOBPanel::update(const LimitOrderBook& LOB)
     setupLabel(labelCount++, font, "ASKS ($)", 28, Theme::Ask,
         lobWidth * 0.75f, 20.f, UISnap::Center, 0.f);
 
-    const auto& bids = LOB.getBids();
-    const auto& asks = LOB.getAsks();
+    const auto& bids = lob.getBids();
+    const auto& asks = lob.getAsks();
 
     // Main Prices
 
-    auto bestBid = LOB.bestBid();
+    auto bestBid = lob.bestBid();
     if (!bestBid)
         bestBid = 0;
-    auto bestAsk = LOB.bestAsk();
+    auto bestAsk = lob.bestAsk();
     if (!bestAsk)
         bestAsk = 0;
-    PriceTicks midPrice = LOB.midPrice();
+    PriceTicks midPrice = lob.midPrice();
     PriceTicks spread = *bestAsk - *bestBid;
 
     float centerX = lobWidth / 2.f;
@@ -130,7 +130,7 @@ void LOBPanel::update(const LimitOrderBook& LOB)
     setupLabel(labelCount++, font, rightSide, 22, Theme::Accent,
         centerX, currentY / 2.f, UISnap::Left, -7.f);
 
-    Quantity maxVol = std::max(LOB.getHighestVolume(BUY, maxCount), LOB.getHighestVolume(SELL, maxCount));
+    Quantity maxVol = std::max(lob.getHighestVolume(BUY, maxCount), lob.getHighestVolume(SELL, maxCount));
 
     if (maxVol == 0) return;
 
@@ -200,7 +200,7 @@ void LOBPanel::update(const LimitOrderBook& LOB)
     }
 }
 
-void LOBPanel::draw(sf::RenderTarget& target, sf::RenderStates states) const
+void LobPanel::draw(sf::RenderTarget& target, sf::RenderStates states) const
 {
     target.draw(panel, states);
     target.draw(sideSeperator, states);

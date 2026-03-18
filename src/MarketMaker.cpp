@@ -10,9 +10,9 @@
 #include "priceutils.h"
 #include "rng.h"
 
-void MarketMaker::decide(Trader& trader, LimitOrderBook& LOB, Clock& clock)
+void MarketMaker::decide(Trader& trader, LimitOrderBook& lob, Clock& clock)
 {
-    trader.clearOrdersPerc(LOB, 0.3f);
+    trader.clearOrdersPerc(lob, 0.3f);
 
     const PriceTicks fairValue = 2000;
     const PriceTicks spread = 4;
@@ -20,9 +20,9 @@ void MarketMaker::decide(Trader& trader, LimitOrderBook& LOB, Clock& clock)
     const Quantity targetInv = 35;
     const size_t depth = 20;
 
-    PriceTicks mid = LOB.midPrice();
+    PriceTicks mid = lob.midPrice();
 
-    auto const& history = LOB.getMidPriceHistory(); 
+    auto const& history = lob.getMidPriceHistory(); 
     PriceTicks avg = mid; 
 
     if (!history.empty()) 
@@ -72,7 +72,7 @@ void MarketMaker::decide(Trader& trader, LimitOrderBook& LOB, Clock& clock)
 
     if (buyCap > 0)
     {
-        auto r = LOB.registerOrder(
+        auto r = lob.registerOrder(
             trader.getId(),
             bid,
             std::min(bidSize, buyCap),
@@ -86,7 +86,7 @@ void MarketMaker::decide(Trader& trader, LimitOrderBook& LOB, Clock& clock)
 
     if (sellCap > 0)
     {
-        auto r = LOB.registerOrder(
+        auto r = lob.registerOrder(
             trader.getId(),
             ask,
             std::min(askSize, sellCap),

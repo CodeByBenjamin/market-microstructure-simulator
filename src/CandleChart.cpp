@@ -22,11 +22,11 @@ CandleChart::CandleChart(const sf::Font& font, Tick binSize, int candlesVisible)
 	gridLines.setPrimitiveType(sf::PrimitiveType::Lines);
 }
 
-void CandleChart::update(LimitOrderBook& LOB, sf::Vector2u winSize, Tick currentTick)
+void CandleChart::update(LimitOrderBook& lob, sf::Vector2u winSize, Tick currentTick)
 {
 	if (candlesVisible <= 0) return;
 
-	auto tradeHistory = LOB.flushTrades();
+	auto tradeHistory = lob.flushTrades();
 	if (tradeHistory.empty()) return;
 
 	if (candles.empty() || currentTick >= nextBinTick) {

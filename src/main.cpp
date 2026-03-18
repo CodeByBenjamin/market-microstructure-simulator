@@ -4,6 +4,7 @@
 #include <memory>
 #include <optional>
 #include <algorithm>
+#include <format>
 
 #include <SFML/Graphics/RenderWindow.hpp>
 #include <SFML/Graphics/RenderTarget.hpp>
@@ -17,7 +18,7 @@
 #include "datatypes.h"
 #include "UIHelpers.h"
 #include "LimitOrderBook.h"
-#include "LOBPanel.h"
+#include "LobPanel.h"
 #include "DepthChart.h"
 #include "Trader.h"
 #include "ContrarianStrategy.h"
@@ -28,133 +29,169 @@
 #include "NoiseStrategy.h"
 #include "FundamentalStrategy.h"
 #include "MomentumStrategy.h"
+#include "rng.h"
+#include "SimulationConfig.h"
+
+void printSimulationSummary(
+    const LimitOrderBook& lob,
+    const Clock& clock,
+    uint32_t seed,
+    Quantity startingInventory,
+    const std::vector<Trader*>& marketMakers,
+    const std::vector<Trader*>& momentumTraders,
+    const std::vector<Trader*>& contrarianTraders,
+    const std::vector<Trader*>& fundamentalTraders,
+    const std::vector<Trader*>& noiseTraders
+);
+
+uint32_t makeSimulationSeed();
+
+void addTraders(
+    std::vector<Trader*>& target,
+    std::vector<std::unique_ptr<Trader>>& storage,
+    LimitOrderBook& lob,
+    TradeStrategy* strategy,
+    TraderType type,
+    int traderCount,
+    PriceTicks funds,
+    Quantity inventory,
+    TraderId& nextTraderId
+);
 
 PriceTicks tradePriceSum = 0;
 Quantity tradeCount = 0;
 
 int main()
 {
+    // Window and UI setup
     auto window = sf::RenderWindow(
-        sf::VideoMode({ 1920u, 1080u }),
+        sf::VideoMode({ Config::Display::windowWidth, Config::Display::windowHeight }),
         "Market simulator",
         sf::State::Fullscreen
     );
     window.setVerticalSyncEnabled(true);
 
     sf::Font font;
-    if (!font.openFromFile("fonts/RobotoMono-Regular.ttf"))
+    if (!font.openFromFile("../../../fonts/RobotoMono-Regular.ttf"))
     {
         std::cerr << "Error loading font!" << std::endl;
         return 1;
     }
 
-    Clock clock;
+    // RNG initialization
+    const uint32_t seed = makeSimulationSeed();
 
-    constexpr double dt = 1.0;
-    constexpr Tick ticksPerSec = 15;
-    constexpr double realDt = 1.0 / static_cast<double>(ticksPerSec);
+    rng.seed(seed);
+
+    std::cout << "\n===== SIMULATION START =====\n";
+    std::cout << "Seed: " << seed << "\n";
+    std::cout << "RNG: Mersenne Twister (mt19937)\n";
+    std::cout << "============================\n";
+
+    // Simulation state
+    Clock clock;
+    constexpr double realDt = 1.0 / Config::Simulation::ticksPerSecond;
 
     auto lastTime = std::chrono::high_resolution_clock::now();
 
-    LimitOrderBook LOB;
+    LimitOrderBook lob;
 
-    PriceTicks startMid = 0;
-    {
-        auto bb0 = LOB.bestBid();
-        auto ba0 = LOB.bestAsk();
-        if (bb0 && ba0)
-            startMid = (*bb0 + *ba0) / 2;
-    }
-
-
-    LOBPanel lobPanel(window.getSize(), font);
-    DepthChart depthChart(window.getSize(), 50);
-    Tick binSize = static_cast<Tick>(ticksPerSec * 2);
-    int candlesVisible = 60;
-    CandleChart candleChart(font, binSize, candlesVisible);
+    LobPanel lobPanel(window.getSize(), font);
+    DepthChart depthChart(window.getSize(), Config::Display::depthLevels);
+    Tick binSize = static_cast<Tick>(
+        Config::Simulation::ticksPerSecond * Config::Display::candleBinMultiplier
+        );
+    CandleChart candleChart(font, binSize, Config::Display::visibleCandles);
     TradersStatsPanel tradersStatsPanel(window.getSize(), font);
 
     bool lobDirty = true;
     bool pauseSim = false;
 
-    // Traders
-    constexpr int momentumCount = 10;
-    constexpr int fundamentalCount = 12; 
-    constexpr int noiseCount = 20;
-    constexpr int contrarianCount = 10;
-    constexpr int makerCount = 12; 
-
+    // Strategy and trader 
+    auto makerStrategy = std::make_unique<MarketMaker>();
     auto momentumStrategy = std::make_unique<MomentumStrategy>();
+    auto contrarianStrategy = std::make_unique<ContrarianStrategy>();
     auto fundamentalStrategy = std::make_unique<FundamentalStrategy>();
     auto noiseStrategy = std::make_unique<NoiseStrategy>();
-    auto contrarianStrategy = std::make_unique<ContrarianStrategy>();
-    auto makerStrategy = std::make_unique<MarketMaker>();
 
     std::vector<std::unique_ptr<Trader>> traderStorage;
-    traderStorage.reserve(momentumCount + fundamentalCount + noiseCount + contrarianCount + makerCount);
+    traderStorage.reserve(Config::Population::totalTraders);
 
+    std::vector<Trader*> marketMakers;
     std::vector<Trader*> momentumTraders;
+    std::vector<Trader*> contrarianTraders;
     std::vector<Trader*> fundamentalTraders;
     std::vector<Trader*> noiseTraders;
-    std::vector<Trader*> contrarianTraders;
-    std::vector<Trader*> marketMakers;
 
-    momentumTraders.reserve(momentumCount);
-    fundamentalTraders.reserve(fundamentalCount);
-    noiseTraders.reserve(noiseCount);
-    contrarianTraders.reserve(contrarianCount);
-    marketMakers.reserve(makerCount);
+    marketMakers.reserve(Config::Population::marketMakers);
+    momentumTraders.reserve(Config::Population::momentumTraders);
+    contrarianTraders.reserve(Config::Population::contrarianTraders);
+    fundamentalTraders.reserve(Config::Population::fundamentalTraders);
+    noiseTraders.reserve(Config::Population::noiseTraders);
 
     TraderId nextTraderId = 1;
 
-    auto makeTrader = [&](auto* strategy,
-        TraderType type,
-        PriceTicks funds,
-        Quantity stocks) -> Trader*
-        {
-            traderStorage.push_back(
-                std::make_unique<Trader>(strategy, type, nextTraderId++, funds, stocks)
-            );
-            Trader* ptr = traderStorage.back().get();
-            LOB.registerTrader(ptr);
-            return ptr;
-        };
+    addTraders(
+        marketMakers,
+        traderStorage,
+        lob,
+        makerStrategy.get(),
+        Maker,
+        Config::Population::marketMakers,
+        Config::InitialState::marketMakerFunds,
+        Config::InitialState::marketMakerInventory,
+        nextTraderId
+    );
 
-    for (int i = 0; i < momentumCount; ++i)
-    {
-        momentumTraders.push_back(
-            makeTrader(momentumStrategy.get(), TraderType::Momentum, 2000 * 25, 25L)
-        );
-    }
+    addTraders(
+        momentumTraders,
+        traderStorage,
+        lob,
+        momentumStrategy.get(),
+        Momentum,
+        Config::Population::momentumTraders,
+        Config::InitialState::momentumFunds,
+        Config::InitialState::momentumInventory,
+        nextTraderId
+    );
 
-    for (int i = 0; i < fundamentalCount; ++i)
-    {
-        fundamentalTraders.push_back(
-            makeTrader(fundamentalStrategy.get(), TraderType::Fundamental, 2000 * 25, 25L)
-        );
-    }
+    addTraders(
+        contrarianTraders,
+        traderStorage,
+        lob,
+        contrarianStrategy.get(),
+        Contrarian,
+        Config::Population::contrarianTraders,
+        Config::InitialState::contrarianFunds,
+        Config::InitialState::contrarianInventory,
+        nextTraderId
+    );
 
-    for (int i = 0; i < noiseCount; ++i)
-    {
-        noiseTraders.push_back(
-            makeTrader(noiseStrategy.get(), TraderType::Noise, 2000 * 15, 15L)
-        );
-    }
+    addTraders(
+        fundamentalTraders,
+        traderStorage,
+        lob,
+        fundamentalStrategy.get(),
+        Fundamental,
+        Config::Population::fundamentalTraders,
+        Config::InitialState::fundamentalFunds,
+        Config::InitialState::fundamentalInventory,
+        nextTraderId
+    );
 
-    for (int i = 0; i < contrarianCount; ++i)
-    {
-        contrarianTraders.push_back(
-            makeTrader(contrarianStrategy.get(), TraderType::Contrarian, 2000 * 25, 25L)
-        );
-    }
+    addTraders(
+        noiseTraders,
+        traderStorage,
+        lob,
+        noiseStrategy.get(),
+        Noise,
+        Config::Population::noiseTraders,
+        Config::InitialState::noiseFunds,
+        Config::InitialState::noiseInventory,
+        nextTraderId
+    );
 
-    for (int i = 0; i < makerCount; ++i)
-    {
-        marketMakers.push_back(
-            makeTrader(makerStrategy.get(), TraderType::Maker, 2000 * 35, 35L)
-        );
-    }
-
+    // Main event/render loop
     while (window.isOpen())
     {
         while (const std::optional event = window.pollEvent())
@@ -177,132 +214,17 @@ int main()
                 {
                     pauseSim = !pauseSim;
 
-                    std::cout << "\n=========== SIM DIAGNOSTICS ===========\n";
-
-                    std::cout << "Total ticks: " << clock.now() << "\n";
-                    std::cout << "Runtime (s): "
-                        << static_cast<double>(clock.now()) / ticksPerSec << "\n";
-
-                    auto printGroup = [](const std::string& name, const auto& traders, LimitOrderBook& LOB)
-                        {
-                            Quantity totalInv = 0;
-                            PriceTicks totalPnl = 0;
-                            int totalCount = 0;
-
-                            Quantity maxInv = 0;
-                            Quantity minInv = 0;
-                            bool first = true;
-
-                            PriceTicks mid = LOB.midPrice();
-
-                            for (const auto& t : traders)
-                            {
-                                Quantity inv = t->getStocks() + t->getLockedStocks();
-                                totalInv += inv;
-
-                                const auto stats = t->getStats();
-
-                                PriceTicks inventoryValue = 0;
-                                if (mul_overflow_i64(mid, inv, inventoryValue))
-                                {
-                                    std::cout << "FATAL: overflow in equity calc\n";
-                                    return;
-                                }
-
-                                PriceTicks equity = t->getFunds() + t->getLockedFunds();
-                                equity += inventoryValue;
-
-                                PriceTicks pnl = equity - stats.startEquity;
-                                totalPnl += pnl;
-                                totalCount++;
-
-                                if (first)
-                                {
-                                    maxInv = inv;
-                                    minInv = inv;
-                                    first = false;
-                                }
-                                else
-                                {
-                                    if (inv > maxInv) maxInv = inv;
-                                    if (inv < minInv) minInv = inv;
-                                }
-                            }
-
-                            Quantity avgInv = 0;
-                            PriceTicks avgPnl = 0;
-
-                            if (totalCount > 0)
-                            {
-                                avgInv = totalInv / totalCount;
-                                avgPnl = totalPnl / totalCount;
-                            }
-
-                            std::cout << "\n[" << name << "]\n";
-                            std::cout << "Avg inventory: " << avgInv << "\n";
-                            std::cout << "Min inventory: " << minInv << "\n";
-                            std::cout << "Max inventory: " << maxInv << "\n";
-                            std::cout << "Avg PnL: " << UIHelper::formatPrice(avgPnl) << "\n";
-                        };
-
-                    printGroup("Market Maker", marketMakers, LOB);
-                    printGroup("Noise", noiseTraders, LOB);
-                    printGroup("Momentum", momentumTraders, LOB);
-                    printGroup("Contrarian", contrarianTraders, LOB);
-                    printGroup("Fundamental", fundamentalTraders, LOB);
-
-                    Quantity totalInventory = 0;
-
-                    auto sumInv = [&](const auto& traders)
-                        {
-                            for (const auto& t : traders)
-                                totalInventory += t->getStocks() + t->getLockedStocks();
-                        };
-
-                    sumInv(marketMakers);
-                    sumInv(noiseTraders);
-                    sumInv(momentumTraders);
-                    sumInv(contrarianTraders);
-                    sumInv(fundamentalTraders);
-
-                    std::cout << "Inventory conservation: " << totalInventory << "\n";
-                    std::cout << "=======================================\n";
-
-                    auto const& midHistory = LOB.getMidPriceHistory();
-
-                    if (!midHistory.empty())
-                    {
-                        PriceTicks minMid = midHistory.front();
-                        PriceTicks maxMid = midHistory.front();
-
-                        long long sumMid = 0;
-                        int above2003 = 0;
-                        int below1993 = 0;
-
-                        for (PriceTicks p : midHistory)
-                        {
-                            if (p < minMid) minMid = p;
-                            if (p > maxMid) maxMid = p;
-
-                            sumMid += p;
-
-                            if (p > 2003) above2003++;
-                            if (p < 1993) below1993++;
-                        }
-
-                        PriceTicks avgMid = static_cast<PriceTicks>(sumMid / static_cast<long long>(midHistory.size()));
-                        PriceTicks rangeMid = maxMid - minMid;
-                        PriceTicks currentMid = midHistory.back();
-
-                        std::cout << "\n[Price Diagnostics]\n";
-                        std::cout << "Current mid: " << UIHelper::formatPrice(currentMid) << "\n";
-                        std::cout << "Average mid: " << UIHelper::formatPrice(avgMid) << "\n";
-                        std::cout << "Min mid: " << UIHelper::formatPrice(minMid) << "\n";
-                        std::cout << "Max mid: " << UIHelper::formatPrice(maxMid) << "\n";
-                        std::cout << "Range: " << UIHelper::formatPrice(rangeMid) << "\n";
-                        std::cout << "Samples above 20.03: " << above2003 << "\n";
-                        std::cout << "Samples below 19.93: " << below1993 << "\n";
-                    }
+                    printSimulationSummary(
+                        lob,
+                        clock,
+                        seed,
+                        Config::InitialState::totalStartingInventory,
+                        marketMakers,
+                        momentumTraders,
+                        contrarianTraders,
+                        fundamentalTraders,
+                        noiseTraders
+                    );
 
                     lastTime = std::chrono::high_resolution_clock::now();
                 }
@@ -312,53 +234,52 @@ int main()
         auto now = std::chrono::high_resolution_clock::now();
         std::chrono::duration<double> elapsed = now - lastTime;
 
-        // Prevent spiral-of-death if rendering stalls
-        constexpr int maxUpdatesPerFrame = 10;
         int updatesThisFrame = 0;
 
-        while (!pauseSim && elapsed.count() >= realDt && updatesThisFrame < maxUpdatesPerFrame)
+        while (!pauseSim &&
+            elapsed.count() >= realDt &&
+            updatesThisFrame < Config::Simulation::maxUpdatesPerFrame)
         {
-            clock.advance(dt);
+            clock.advance(Config::Simulation::tickDelta);
 
             lastTime += std::chrono::duration_cast<std::chrono::high_resolution_clock::duration>(
                 std::chrono::duration<double>(realDt)
             );
             elapsed = now - lastTime;
 
-            LOB.update();
+            lob.update();
 
-            for (Trader* t : momentumTraders)
+            for (Trader* trader : marketMakers)
             {
-                if (t) t->update(LOB, clock);
-            }
-            
-            for (Trader* t : fundamentalTraders)
-            {
-                if (t) t->update(LOB, clock);
-            }
-            
-            for (Trader* t : noiseTraders)
-            {
-                if (t) t->update(LOB, clock);
+                trader->update(lob, clock);
             }
 
-            for (Trader* t : contrarianTraders)
+            for (Trader* trader : momentumTraders)
             {
-                if (t) t->update(LOB, clock);
+                trader->update(lob, clock);
             }
 
-            for (Trader* t : marketMakers)
+            for (Trader* trader : contrarianTraders)
             {
-                if (t) t->update(LOB, clock);
-            } 
+                trader->update(lob, clock);
+            }
 
-            LOB.processOrders(clock);
+            for (Trader* trader : fundamentalTraders)
+            {
+                trader->update(lob, clock);
+            }
+
+            for (Trader* trader : noiseTraders)
+            {
+                trader->update(lob, clock);
+            }
+
+            lob.processOrders(clock);
             lobDirty = true;
             ++updatesThisFrame;
         }
 
-        // If frame fell badly behind, resync instead of trying to catch up forever
-        if (!pauseSim && updatesThisFrame == maxUpdatesPerFrame)
+        if (!pauseSim && updatesThisFrame == Config::Simulation::maxUpdatesPerFrame)
         {
             lastTime = now;
         }
@@ -367,10 +288,10 @@ int main()
 
         if (lobDirty)
         {
-            lobPanel.update(LOB);
-            depthChart.update(LOB);
-            candleChart.update(LOB, window.getSize(), clock.now());
-            tradersStatsPanel.update(LOB);
+            lobPanel.update(lob);
+            depthChart.update(lob);
+            candleChart.update(lob, window.getSize(), clock.now());
+            tradersStatsPanel.update(lob);
             lobDirty = false;
         }
 
@@ -382,4 +303,206 @@ int main()
     }
 
     return 0;
+}
+
+void printSimulationSummary(
+    const LimitOrderBook& lob,
+    const Clock& clock,
+    uint32_t seed,
+    Quantity startingInventory,
+    const std::vector<Trader*>& marketMakers,
+    const std::vector<Trader*>& momentumTraders,
+    const std::vector<Trader*>& contrarianTraders,
+    const std::vector<Trader*>& fundamentalTraders,
+    const std::vector<Trader*>& noiseTraders
+)
+{
+    std::cout << "\n========== SIMULATION SUMMARY ==========\n";
+
+    std::cout << "Seed: " << seed << "\n\n";
+    std::cout << "Ticks: " << clock.now() << "\n";
+
+    const double seconds =
+        static_cast<double>(clock.now()) / Config::Simulation::ticksPerSecond;
+
+    std::cout << "Simulated time (seconds): "
+        << std::format("{:.2f}", seconds) << "\n";
+    std::cout << "Ticks per second: "
+        << Config::Simulation::ticksPerSecond << "\n";
+
+    std::cout << "\nTotal traders: " << Config::Population::totalTraders << "\n";
+
+    double tradesPerSecond = 0.0;
+    if (seconds > 0.0)
+        tradesPerSecond = static_cast<double>(tradeCount) / seconds;
+
+    PriceTicks averageTradePrice = 0;
+    if (tradeCount > 0)
+        averageTradePrice = tradePriceSum / tradeCount;
+
+    std::cout << "\n[Market]\n";
+    std::cout << "Trades: " << tradeCount << "\n";
+    std::cout << "Trades per second: " << std::format("{:.2f}", tradesPerSecond) << "\n";
+    std::cout << "Average trade price: " << UIHelper::formatPrice(averageTradePrice) << "\n";
+
+    const auto& midHistory = lob.getMidPriceHistory();
+
+    if (!midHistory.empty())
+    {
+        PriceTicks minMid = midHistory.front();
+        PriceTicks maxMid = midHistory.front();
+        PriceTicks sumMid = 0;
+
+        for (PriceTicks p : midHistory)
+        {
+            if (p < minMid) minMid = p;
+            if (p > maxMid) maxMid = p;
+            sumMid += p;
+        }
+
+        const PriceTicks avgMid =
+            static_cast<PriceTicks>(sumMid / static_cast<long long>(midHistory.size()));
+        const PriceTicks rangeMid = maxMid - minMid;
+        const PriceTicks currentMid = midHistory.back();
+
+        std::cout << "Current midprice: " << UIHelper::formatPrice(currentMid) << "\n";
+        std::cout << "Average midprice: " << UIHelper::formatPrice(avgMid) << "\n";
+        std::cout << "Min midprice: " << UIHelper::formatPrice(minMid) << "\n";
+        std::cout << "Max midprice: " << UIHelper::formatPrice(maxMid) << "\n";
+        std::cout << "Midprice range: " << UIHelper::formatPrice(rangeMid) << "\n";
+    }
+
+    auto printGroup = [](const std::string& name,
+        const auto& traders,
+        const LimitOrderBook& lob)
+        {
+            Quantity totalInv = 0;
+            PriceTicks totalPnl = 0;
+            int totalCount = 0;
+
+            Quantity maxInv = 0;
+            Quantity minInv = 0;
+            bool first = true;
+
+            const PriceTicks mid = lob.midPrice();
+
+            for (const auto& t : traders)
+            {
+                const Quantity inv = t->getStocks() + t->getLockedStocks();
+                totalInv += inv;
+
+                const auto stats = t->getStats();
+
+                PriceTicks inventoryValue = 0;
+                if (mul_overflow_i64(mid, inv, inventoryValue))
+                {
+                    std::cerr << "Simulation summary error: overflow computing equity\n";
+                    return;
+                }
+
+                PriceTicks equity = t->getFunds() + t->getLockedFunds();
+                equity += inventoryValue;
+
+                const PriceTicks pnl = equity - stats.startEquity;
+                totalPnl += pnl;
+                totalCount++;
+
+                if (first)
+                {
+                    maxInv = inv;
+                    minInv = inv;
+                    first = false;
+                }
+                else
+                {
+                    if (inv > maxInv) maxInv = inv;
+                    if (inv < minInv) minInv = inv;
+                }
+            }
+
+            Quantity avgInv = 0;
+            PriceTicks avgPnl = 0;
+
+            if (totalCount > 0)
+            {
+                avgInv = totalInv / totalCount;
+                avgPnl = totalPnl / totalCount;
+            }
+
+            std::cout << "\n[" << name << "]\n";
+            std::cout << "Average PnL: " << UIHelper::formatPrice(avgPnl) << "\n";
+            std::cout << "Average inventory: " << avgInv << "\n";
+            std::cout << "Min inventory: " << minInv << "\n";
+            std::cout << "Max inventory: " << maxInv << "\n";
+        };
+
+    printGroup("Market Makers", marketMakers, lob);
+    printGroup("Momentum Traders", momentumTraders, lob);
+    printGroup("Contrarian Traders", contrarianTraders, lob);
+    printGroup("Fundamental Traders", fundamentalTraders, lob);
+    printGroup("Noise Traders", noiseTraders, lob);
+
+    Quantity totalInventory = 0;
+
+    auto sumInv = [&](const auto& traders)
+        {
+            for (const auto& t : traders)
+                totalInventory += t->getStocks() + t->getLockedStocks();
+        };
+
+    sumInv(marketMakers);
+    sumInv(momentumTraders);
+    sumInv(contrarianTraders);
+    sumInv(fundamentalTraders);
+    sumInv(noiseTraders);
+
+    std::cout << "\n[Consistency Checks]\n";
+    if (totalInventory == startingInventory)
+        std::cout << "Inventory conservation: "
+        << totalInventory << " / " << startingInventory << " (PASS)\n";
+    else
+        std::cout << "Inventory conservation: "
+        << totalInventory << " / " << startingInventory << " (FAIL)\n";
+
+    std::cout << "========================================\n";
+}
+
+uint32_t makeSimulationSeed()
+{
+    if (Config::Simulation::deterministicSeed)
+        return Config::Simulation::fixedSeed;
+
+    return static_cast<uint32_t>(
+        std::chrono::high_resolution_clock::now().time_since_epoch().count()
+        );
+}
+
+void addTraders(
+    std::vector<Trader*>& target,
+    std::vector<std::unique_ptr<Trader>>& storage,
+    LimitOrderBook& lob,
+    TradeStrategy* strategy,
+    TraderType type,
+    int traderCount,
+    PriceTicks funds,
+    Quantity inventory,
+    TraderId& nextTraderId
+)
+{
+    for (int i = 0; i < traderCount; ++i)
+    {
+        auto trader = std::make_unique<Trader>(
+            strategy,
+            type,
+            nextTraderId++,
+            funds,
+            inventory
+        );
+
+        Trader* ptr = trader.get();
+
+        storage.push_back(std::move(trader));
+        lob.registerTrader(ptr);
+        target.push_back(ptr);
+    }
 }

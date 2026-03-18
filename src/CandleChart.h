@@ -38,5 +38,5 @@ private:
 public:
 	CandleChart(const sf::Font& font, Tick binSize, int candlesVisible);
 
-	void update(LimitOrderBook& LOB, sf::Vector2u winSize, Tick currentTick);
+	void update(LimitOrderBook& lob, sf::Vector2u winSize, Tick currentTick);
 };

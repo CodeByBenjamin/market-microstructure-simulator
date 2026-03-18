@@ -9,7 +9,7 @@
 #include "priceutils.h"
 #include "rng.h"
 
-void FundamentalStrategy::decide(Trader& trader, LimitOrderBook& LOB, Clock& clock)
+void FundamentalStrategy::decide(Trader& trader, LimitOrderBook& lob, Clock& clock)
 {
     std::bernoulli_distribution tradeChance(0.25);
     if (!tradeChance(rng))
@@ -21,7 +21,7 @@ void FundamentalStrategy::decide(Trader& trader, LimitOrderBook& LOB, Clock& clo
         return;
 
     if (now != 0 && (now + trader.getId()) % 10 == 0 && trader.getOrderCount() > 3)
-        trader.clearOrdersPerc(LOB, 0.4f);
+        trader.clearOrdersPerc(lob, 0.4f);
 
     const Quantity maxInv = 40;
     const Quantity baseSize = 3;
@@ -31,8 +31,8 @@ void FundamentalStrategy::decide(Trader& trader, LimitOrderBook& LOB, Clock& clo
     std::uniform_int_distribution<PriceTicks> jitter(-4, 4);
     PriceTicks ref = std::max<PriceTicks>(1, fairValue + jitter(rng));
 
-    auto bestBid = LOB.bestBid();
-    auto bestAsk = LOB.bestAsk();
+    auto bestBid = lob.bestBid();
+    auto bestAsk = lob.bestAsk();
 
     PriceTicks bidPrice = std::max<PriceTicks>(1, ref - 2);
     PriceTicks askPrice = ref + 2;
@@ -65,7 +65,7 @@ void FundamentalStrategy::decide(Trader& trader, LimitOrderBook& LOB, Clock& clo
     {
         if (bidSize > 0)
         {
-            auto res = LOB.registerOrder(trader.getId(), *bestAsk, bidSize, Side::BUY, clock);
+            auto res = lob.registerOrder(trader.getId(), *bestAsk, bidSize, Side::BUY, clock);
             if (res.reason == RejectReason::None && res.orderId != 0)
                 trader.addActiveOrderId(res.orderId, *bestAsk);
         }
@@ -77,7 +77,7 @@ void FundamentalStrategy::decide(Trader& trader, LimitOrderBook& LOB, Clock& clo
     {
         if (askSize > 0)
         {
-            auto res = LOB.registerOrder(trader.getId(), *bestBid, askSize, Side::SELL, clock);
+            auto res = lob.registerOrder(trader.getId(), *bestBid, askSize, Side::SELL, clock);
             if (res.reason == RejectReason::None && res.orderId != 0)
                 trader.addActiveOrderId(res.orderId, *bestBid);
         }
@@ -91,7 +91,7 @@ void FundamentalStrategy::decide(Trader& trader, LimitOrderBook& LOB, Clock& clo
     {
         if (bidSize > 0 && trader.getStocks() < maxInv)
         {
-            auto res = LOB.registerOrder(trader.getId(), bidPrice, bidSize, Side::BUY, clock);
+            auto res = lob.registerOrder(trader.getId(), bidPrice, bidSize, Side::BUY, clock);
             if (res.reason == RejectReason::None && res.orderId != 0)
                 trader.addActiveOrderId(res.orderId, bidPrice);
         }
@@ -100,7 +100,7 @@ void FundamentalStrategy::decide(Trader& trader, LimitOrderBook& LOB, Clock& clo
     {
         if (askSize > 0)
         {
-            auto res = LOB.registerOrder(trader.getId(), askPrice, askSize, Side::SELL, clock);
+            auto res = lob.registerOrder(trader.getId(), askPrice, askSize, Side::SELL, clock);
             if (res.reason == RejectReason::None && res.orderId != 0)
                 trader.addActiveOrderId(res.orderId, askPrice);
         }

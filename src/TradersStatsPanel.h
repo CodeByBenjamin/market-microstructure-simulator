@@ -38,5 +38,5 @@ private:
 public:
     TradersStatsPanel(sf::Vector2u winSize, const sf::Font& font);
 
-    void update(const LimitOrderBook& LOB);
+    void update(const LimitOrderBook& lob);
 };

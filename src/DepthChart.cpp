@@ -28,12 +28,12 @@ DepthChart::DepthChart(sf::Vector2u winSize, PriceTicks binSize)
     panel.setFillColor(Theme::Surface);
 }
 
-void DepthChart::updateDepthPoints(const LimitOrderBook& LOB)
+void DepthChart::updateDepthPoints(const LimitOrderBook& lob)
 {
     depthPoints.clear();
 
-    const auto& bids = LOB.getBids();
-    const auto& asks = LOB.getAsks();
+    const auto& bids = lob.getBids();
+    const auto& asks = lob.getAsks();
 
     depthPoints.reserve(bids.size() + asks.size() + 1);
 
@@ -63,7 +63,7 @@ void DepthChart::updateDepthPoints(const LimitOrderBook& LOB)
     }
 
     //Midpoint
-    PriceTicks midPrice = LOB.midPrice();
+    PriceTicks midPrice = lob.midPrice();
     PriceTicks priceLevel = std::floor(midPrice / binSize) * binSize;
     depthPoints.push_back({ priceLevel, 0 });
 
@@ -88,8 +88,8 @@ void DepthChart::updateDepthPoints(const LimitOrderBook& LOB)
     totalVolume = std::max(runningBidVol, runningAskVol);
 }
 
-void DepthChart::update(const LimitOrderBook& LOB) {
-    updateDepthPoints(LOB);
+void DepthChart::update(const LimitOrderBook& lob) {
+    updateDepthPoints(lob);
     
     if (depthPoints.empty()) {
         bidTriangles.clear();

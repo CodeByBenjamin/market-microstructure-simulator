@@ -1,23 +1,21 @@
-#include <map>
-#include <vector>
-#include <deque>
-#include <iostream>
 #include <algorithm>
 #include <cmath>
+#include <iostream>
 
 #include "Trader.h"
 #include "LimitOrderBook.h"
 #include "Clock.h"
-#include "datatypes.h"
 #include "TradeStrategy.h"
 #include "priceutils.h"
+
+// ----- Construction -----
 
 Trader::Trader(TradeStrategy* strategy, TraderType type, TraderId id, PriceTicks funds, Quantity stocks)
     : strategy(strategy),
     type(type),
     id(id),
     funds(funds),
-    stocks(stocks)
+    stocks(stocks) 
 {
     lockedFunds = 0;
     lockedStocks = 0;
@@ -28,172 +26,171 @@ Trader::Trader(TradeStrategy* strategy, TraderType type, TraderId id, PriceTicks
     stats.oldPosition = stocks;
 }
 
-TraderId Trader::getId() const
-{
+// ----- Trader state accessors -----
+
+TraderId Trader::getId() const {
     return id;
 }
 
-PriceTicks Trader::getFunds() const
-{
+PriceTicks Trader::getFunds() const {
     return funds;
 }
 
-PriceTicks Trader::getLockedFunds() const
-{
+PriceTicks Trader::getLockedFunds() const {
     return lockedFunds;
 }
 
-Quantity Trader::getStocks() const
-{
+Quantity Trader::getStocks() const {
     return stocks;
 }
 
-Quantity Trader::getLockedStocks() const
-{
+Quantity Trader::getLockedStocks() const {
     return lockedStocks;
 }
 
-const std::map<PriceTicks, std::vector<OrderId>>& Trader::getActiveOrderIds() const
-{
+const std::map<PriceTicks, std::vector<OrderId>>& Trader::getActiveOrdersByPrice() const {
     return ordersByPrice;
 }
 
-size_t Trader::getOrderCount() const
-{
+size_t Trader::getOrderCount() const {
     return idToPrice.size();
 }
 
-TraderStats Trader::getStats() const
-{
+const TraderStats& Trader::getStats() const {
     return stats;
 }
 
-TraderType Trader::getType() const
-{
+TraderType Trader::getType() const {
     return type;
 }
 
-void Trader::changeFunds(PriceTicks funds)
-{
-    this->funds += funds;
+// ----- Portfolio state mutation -----
+
+void Trader::changeFunds(PriceTicks deltaFunds) {
+    funds += deltaFunds;
 }
 
-void Trader::changeStocks(Quantity stocks)
-{
-    this->stocks += stocks;
+void Trader::changeStocks(Quantity deltaStocks) {
+    stocks += deltaStocks;
 }
 
-void Trader::lockFunds(PriceTicks funds)
-{
-    this->funds -= funds;
-    this->lockedFunds += funds;
+void Trader::lockFunds(PriceTicks amount) {
+    funds -= amount;
+    lockedFunds += amount;
 }
 
-void Trader::lockStocks(Quantity stocks)
-{
-    this->stocks -= stocks;
-    this->lockedStocks += stocks;
+void Trader::lockStocks(Quantity amount) {
+    stocks -= amount;
+    lockedStocks += amount;
 }
 
-void Trader::unlockFunds(PriceTicks funds)
-{
-    this->funds += funds;
-    this->lockedFunds -= funds;
+void Trader::unlockFunds(PriceTicks amount) {
+    funds += amount;
+    lockedFunds -= amount;
 }
 
-void Trader::unlockStocks(Quantity stocks)
-{
-    this->stocks += stocks;
-    this->lockedStocks -= stocks;
+void Trader::unlockStocks(Quantity amount) {
+    stocks += amount;
+    lockedStocks -= amount;
 }
 
-void Trader::changeLockedFunds(PriceTicks funds)
-{
-    this->lockedFunds += funds;
+void Trader::changeLockedFunds(PriceTicks deltaFunds) {
+    lockedFunds += deltaFunds;
 }
 
-void Trader::changeLockedStocks(Quantity stocks)
-{
-    this->lockedStocks += stocks;
+void Trader::changeLockedStocks(Quantity deltaStocks) {
+    lockedStocks += deltaStocks;
 }
 
-void Trader::update(LimitOrderBook& LOB, Clock& clock)
-{
-    strategy->decide(*this, LOB, clock);
+// ----- Simulation lifecycle -----
+
+void Trader::update(LimitOrderBook& lob, Clock& clock) {
+    if (strategy == nullptr) {
+        return;
+    }
+
+    strategy->decide(*this, lob, clock);
 }
 
-void Trader::addActiveOrderId(OrderId id, PriceTicks price)
-{
+// ----- Active order bookkeeping -----
+
+void Trader::addActiveOrderId(OrderId id, PriceTicks price) {
     idToPrice[id] = price;
     ordersByPrice[price].push_back(id);
-    activeOrderQueue.push_back(id);   // newest goes to back
+    activeOrderQueue.push_back(id);
 }
 
-void Trader::removeActiveOrderId(OrderId id)
-{
-    auto itID = idToPrice.find(id);
-    if (itID == idToPrice.end())
+void Trader::removeActiveOrderId(OrderId id) {
+    const auto idIt = idToPrice.find(id);
+    if (idIt == idToPrice.end()) {
         return;
+    }
 
-    PriceTicks price = itID->second;
+    PriceTicks price = idIt->second;
 
-    auto itPrice = ordersByPrice.find(price);
-    if (itPrice != ordersByPrice.end()) {
-        std::erase(itPrice->second, id);
+    auto priceIt = ordersByPrice.find(price);    
+    if (priceIt != ordersByPrice.end()) {
+        std::erase(priceIt->second, id);
 
-        if (itPrice->second.empty()) {
-            ordersByPrice.erase(itPrice);
+        if (priceIt->second.empty()) {
+            ordersByPrice.erase(priceIt);
         }
     }
 
-    idToPrice.erase(itID);
+    idToPrice.erase(idIt);
 }
 
-void Trader::onOrderFinished(OrderId id)
-{
+void Trader::onOrderFinished(OrderId id) {
     removeActiveOrderId(id);
 }
 
-void Trader::clearOrdersPerc(LimitOrderBook& LOB, float perc)
-{
-    if (idToPrice.empty() || activeOrderQueue.empty())
+void Trader::clearOrdersPerc(LimitOrderBook& lob, float perc) {
+    if (idToPrice.empty() || activeOrderQueue.empty()) {
         return;
+    }
 
     int numToCancel = static_cast<int>(std::round(idToPrice.size() * perc));
     numToCancel = std::clamp(numToCancel, 0, static_cast<int>(idToPrice.size()));
 
     int cancelled = 0;
 
-    while (cancelled < numToCancel && !activeOrderQueue.empty())
-    {
+    while (cancelled < numToCancel && !activeOrderQueue.empty()) {
         OrderId id = activeOrderQueue.front();
         activeOrderQueue.pop_front();
 
         auto it = idToPrice.find(id);
-        if (it == idToPrice.end())
+        if (it == idToPrice.end()) {
             continue;
+        }
 
-        LOB.cancelOrder(id);
+        if (!lob.cancelOrder(id)) {
+            std::cerr << "Trader::clearOrdersPerc error: failed to cancel orderId=" << id << '\n';
+            continue;
+        }
         removeActiveOrderId(id);
         ++cancelled;
     }
 }
 
-void Trader::onTradeFilled(Side side, PriceTicks fillPrice, Quantity fillQty)
-{
+// ----- Fill/accounting callbacks -----
+
+void Trader::onTradeFilled(Side side, PriceTicks fillPrice, Quantity fillQty) {
     if (side == Side::BUY)
     {
         Quantity prevPos = stats.oldPosition;
 
         PriceTicks oldValue = 0;
-        if (mul_overflow_i64(stats.avgEntry, prevPos, oldValue)) oldValue = 0;
+        if (mul_overflow_i64(stats.avgEntry, prevPos, oldValue)) {
+            oldValue = 0;
+        }
         PriceTicks newValue = 0;
-        if (mul_overflow_i64(fillPrice, fillQty, newValue)) newValue = 0;
+        if (mul_overflow_i64(fillPrice, fillQty, newValue)) {
+            newValue = 0;
+        }
 
         Quantity newPos = prevPos + fillQty;
 
-        if (newPos > 0)
-        {
+        if (newPos > 0) {
             stats.avgEntry = (oldValue + newValue) / newPos;
         }
 
@@ -203,22 +200,24 @@ void Trader::onTradeFilled(Side side, PriceTicks fillPrice, Quantity fillQty)
     {
         PriceTicks value = 0;
         if (mul_overflow_i64(fillPrice, fillQty, value)) {
-            std::cout << "FATAL: overflow in recordTrade\n";
+            std::cerr << "Trader::onTradeFilled error: overflow computing sell value\n";
             return;
         }
 
-        if (fillPrice >= stats.avgEntry)
-        {
+        if (fillPrice >= stats.avgEntry) {
             stats.winSellValue += value;
         }
 
         stats.totalSellValue += value;
-        if (fillQty >= stats.oldPosition)
+        if (fillQty >= stats.oldPosition) {
             stats.oldPosition = 0;
-        else
-            stats.oldPosition = stats.oldPosition - fillQty;
+        }
+        else {
+            stats.oldPosition -= fillQty;
+        }
     }
 
-    if (stats.oldPosition == 0)
+    if (stats.oldPosition == 0) {
         stats.avgEntry = 0;
+    }
 }

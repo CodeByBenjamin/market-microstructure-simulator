@@ -5,5 +5,5 @@
 class ContrarianStrategy : public TradeStrategy
 {
 public:
-	void decide(Trader& trader, LimitOrderBook& LOB, Clock& clock) override;
+	void decide(Trader& trader, LimitOrderBook& lob, Clock& clock) override;
 };

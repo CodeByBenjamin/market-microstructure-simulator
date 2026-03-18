@@ -35,6 +35,6 @@ private:
 public:
     DepthChart(sf::Vector2u winSize, PriceTicks binSize);
 
-    void updateDepthPoints(const LimitOrderBook& LOB);
-    void update(const LimitOrderBook& LOB);
+    void updateDepthPoints(const LimitOrderBook& lob);
+    void update(const LimitOrderBook& lob);
 };

@@ -10,7 +10,7 @@
 #include "priceutils.h"
 #include "rng.h"
 
-void MomentumStrategy::decide(Trader& trader, LimitOrderBook& LOB, Clock& clock)
+void MomentumStrategy::decide(Trader& trader, LimitOrderBook& lob, Clock& clock)
 {
     std::bernoulli_distribution tradeChance(0.25);
     if (!tradeChance(rng))
@@ -20,14 +20,14 @@ void MomentumStrategy::decide(Trader& trader, LimitOrderBook& LOB, Clock& clock)
 
     if (now != 0 && (now + trader.getId()) % 10 == 0 && trader.getOrderCount() > 3)
     {
-        trader.clearOrdersPerc(LOB, 0.4f);
+        trader.clearOrdersPerc(lob, 0.4f);
     }
 
     const size_t depth = 8;
     const Quantity targetInv = 30;
     const Quantity maxInv = 60;
 
-    auto const& history = LOB.getMidPriceHistory();
+    auto const& history = lob.getMidPriceHistory();
     if (history.empty())
         return;
 
@@ -106,7 +106,7 @@ void MomentumStrategy::decide(Trader& trader, LimitOrderBook& LOB, Clock& clock)
 
     if (diff > threshold && recentSlope > 0)
     {
-        auto bestAsk = LOB.bestAsk();
+        auto bestAsk = lob.bestAsk();
         if (!bestAsk)
             return;
 
@@ -127,13 +127,13 @@ void MomentumStrategy::decide(Trader& trader, LimitOrderBook& LOB, Clock& clock)
         if (willBuy <= 0)
             return;
 
-        auto res = LOB.registerOrder(trader.getId(), price, willBuy, Side::BUY, clock);
+        auto res = lob.registerOrder(trader.getId(), price, willBuy, Side::BUY, clock);
         if (res.reason == RejectReason::None && res.orderId != 0)
             trader.addActiveOrderId(res.orderId, price);
     }
     else if (diff < -threshold && recentSlope < 0)
     {
-        auto bestBid = LOB.bestBid();
+        auto bestBid = lob.bestBid();
         if (!bestBid)
             return;
 
@@ -148,7 +148,7 @@ void MomentumStrategy::decide(Trader& trader, LimitOrderBook& LOB, Clock& clock)
         if (willSell <= 0)
             return;
 
-        auto res = LOB.registerOrder(trader.getId(), price, willSell, Side::SELL, clock);
+        auto res = lob.registerOrder(trader.getId(), price, willSell, Side::SELL, clock);
         if (res.reason == RejectReason::None && res.orderId != 0)
             trader.addActiveOrderId(res.orderId, price);
     }
