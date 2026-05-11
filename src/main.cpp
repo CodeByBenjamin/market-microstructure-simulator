@@ -391,7 +391,7 @@ void printSimulationSummary(
                 const Quantity inv = t->getStocks() + t->getLockedStocks();
                 totalInv += inv;
 
-                const auto stats = t->getStats();
+                const auto& stats = t->getStats();
 
                 PriceTicks inventoryValue = 0;
                 if (mul_overflow_i64(mid, inv, inventoryValue))
